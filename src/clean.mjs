@@ -1,5 +1,6 @@
 import { rm } from "node:fs/promises";
 import { findInstallers } from "./installers.mjs";
+import { JSON_SCHEMA_VERSION } from "./schema.mjs";
 import { isAppRunning, measureBytes, ruleTargets } from "./targets.mjs";
 
 const REMOVE_OPTIONS = { recursive: true, force: true, maxRetries: 2 };
@@ -94,6 +95,7 @@ export async function clean({
   }
 
   return {
+    schemaVersion: JSON_SCHEMA_VERSION,
     dryRun,
     results,
     freedBytes: results

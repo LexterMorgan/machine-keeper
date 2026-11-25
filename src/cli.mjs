@@ -50,6 +50,24 @@ Safety
   - Never uses sudo, never touches documents, never recurses into Downloads.
 `;
 
+/**
+ * The exact object `mk report --json` emits: the read-only snapshot plus the
+ * startup audit. Exported so the JSON contract test can pin the CLI shape
+ * without touching the real home directory, and so future faces (app, web)
+ * share one composition point.
+ */
+export async function buildFullReport({
+  home,
+  rules,
+  now = () => new Date(),
+  audit = auditStartup,
+  ...reportOptions
+}) {
+  const report = await buildReport({ home, rules, now, ...reportOptions });
+  report.startup = await audit({ home });
+  return report;
+}
+
 export function parseArgs(argv) {
   const options = {
     command: "report",
@@ -376,8 +394,7 @@ export async function main(
   }
 
   const rules = selectRules(loaded.rules, { only: options.only, includeOptIn: true });
-  const report = await buildReport({ home, rules, now: () => new Date() });
-  report.startup = await auditStartup({ home });
+  const report = await buildFullReport({ home, rules, now: () => new Date() });
   if (options.json) {
     out(JSON.stringify(report, null, 2));
   } else {

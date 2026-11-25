@@ -1,4 +1,5 @@
 import { findInstallers } from "./installers.mjs";
+import { JSON_SCHEMA_VERSION } from "./schema.mjs";
 import { diskInfo, memoryInfo } from "./system.mjs";
 import { isAppRunning, measureRule } from "./targets.mjs";
 
@@ -58,6 +59,7 @@ export async function buildReport({
   const optIn = rows.filter((row) => row.optIn);
 
   return {
+    schemaVersion: JSON_SCHEMA_VERSION,
     generatedAt: now().toISOString(),
     home,
     disk,
