@@ -52,6 +52,9 @@ export function validateRules(payload) {
     if (!RISKS.has(rule.risk)) {
       fail(`rule ${rule.id}: risk must be one of ${[...RISKS].join(", ")}`);
     }
+    if (rule.risk === "user-files" && rule.optIn !== true) {
+      fail(`rule ${rule.id}: risk "user-files" requires optIn: true`);
+    }
     if (!Array.isArray(rule.paths) || rule.paths.length === 0) {
       fail(`rule ${rule.id}: paths must be a non-empty array`);
     }

@@ -95,3 +95,16 @@ test("selectRules filters opt-in and --only", () => {
   );
   assert.throws(() => selectRules(rules, { only: ["nope"] }), /unknown rule id/);
 });
+
+test("validateRules requires optIn for user-files risk", () => {
+  assert.throws(
+    () => validateRules({ schemaVersion: 1, rules: [rule({ risk: "user-files" })] }),
+    /requires optIn/
+  );
+
+  const { rules } = validateRules({
+    schemaVersion: 1,
+    rules: [rule({ id: "steam", risk: "user-files", optIn: true })],
+  });
+  assert.equal(rules[0].optIn, true);
+});

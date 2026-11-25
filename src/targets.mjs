@@ -41,7 +41,19 @@ export async function measureRule(home, rule, { runCmd = defaultRun } = {}) {
   return { totalBytes: total, parts };
 }
 
+/**
+ * Whether the rule's owning app is running.
+ *
+ * `pgrep` exits 1 when nothing matches, which is a definite "no". Any other
+ * failure (pgrep missing, timed out, permission denied) leaves the answer
+ * unknown; treat that as running so a cleanup skips the cache instead of
+ * guessing. The report surfaces such a rule as `appRunning: true`, which also
+ * keeps it out of the app's "clean safe" set.
+ */
 export async function isAppRunning(app, { runCmd = defaultRun } = {}) {
   const result = await runCmd("pgrep", ["-f", `${app}.app/Contents/MacOS`]);
-  return result.ok && result.stdout.trim() !== "";
+  if (!result.ok) {
+    return result.code !== 1;
+  }
+  return result.stdout.trim() !== "";
 }
