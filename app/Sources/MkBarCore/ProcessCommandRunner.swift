@@ -4,6 +4,10 @@ import Foundation
 
 /// Runs commands without a shell, capturing each stream to its own temporary
 /// file so a chatty child cannot fill a pipe and deadlock.
+///
+/// The child is spawned as its own process-group leader. On timeout the whole
+/// group is signalled, so helpers that `mk` started (`du`, `npm`, `brew`, …)
+/// cannot outlive the command and keep the cache busy.
 public struct ProcessCommandRunner: CommandRunning {
     private let temporaryRoot: URL
     private let terminationGracePeriod: TimeInterval
@@ -39,7 +43,11 @@ public struct ProcessCommandRunner: CommandRunning {
             .appendingPathComponent("mkbar-\(UUID().uuidString)", isDirectory: true)
 
         do {
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: false)
+            try fileManager.createDirectory(
+                at: directory,
+                withIntermediateDirectories: false,
+                attributes: [.posixPermissions: 0o700]
+            )
         } catch {
             throw CommandError.launchFailed("could not create a temporary directory: \(error.localizedDescription)")
         }
@@ -50,83 +58,195 @@ public struct ProcessCommandRunner: CommandRunning {
         let stdoutURL = directory.appendingPathComponent("stdout", isDirectory: false)
         let stderrURL = directory.appendingPathComponent("stderr", isDirectory: false)
 
-        guard fileManager.createFile(atPath: stdoutURL.path, contents: nil),
-              fileManager.createFile(atPath: stderrURL.path, contents: nil)
-        else {
-            throw CommandError.launchFailed("could not create temporary output files")
+        let stdoutFD = open(stdoutURL.path, O_WRONLY | O_CREAT | O_TRUNC, 0o600)
+        guard stdoutFD >= 0 else {
+            throw CommandError.launchFailed("could not create the temporary output file")
         }
-
-        let stdoutHandle: FileHandle
-        do {
-            stdoutHandle = try FileHandle(forWritingTo: stdoutURL)
-        } catch {
-            throw CommandError.launchFailed("could not open the temporary output file: \(error.localizedDescription)")
+        let stderrFD = open(stderrURL.path, O_WRONLY | O_CREAT | O_TRUNC, 0o600)
+        guard stderrFD >= 0 else {
+            _ = close(stdoutFD)
+            throw CommandError.launchFailed("could not create the temporary error file")
         }
-
-        let stderrHandle: FileHandle
-        do {
-            stderrHandle = try FileHandle(forWritingTo: stderrURL)
-        } catch {
-            try? stdoutHandle.close()
-            throw CommandError.launchFailed("could not open the temporary error file: \(error.localizedDescription)")
-        }
-
         defer {
-            try? stdoutHandle.close()
-            try? stderrHandle.close()
+            _ = close(stdoutFD)
+            _ = close(stderrFD)
         }
 
-        let process = Process()
-        process.executableURL = command.executable
-        process.arguments = command.arguments
-        process.environment = command.environment
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = stdoutHandle
-        process.standardError = stderrHandle
-
-        do {
-            try process.run()
-        } catch {
-            throw CommandError.launchFailed("\(command.executable.path): \(error.localizedDescription)")
+        var fileActions: posix_spawn_file_actions_t? = nil
+        guard posix_spawn_file_actions_init(&fileActions) == 0 else {
+            throw CommandError.launchFailed("could not prepare spawn file actions")
+        }
+        defer {
+            posix_spawn_file_actions_destroy(&fileActions)
         }
 
-        let deadline = Date().addingTimeInterval(command.timeout)
-        var timedOut = false
-        while process.isRunning {
-            if Date() >= deadline {
-                timedOut = true
-                if process.isRunning {
-                    process.terminate()
+        guard posix_spawn_file_actions_addopen(&fileActions, STDIN_FILENO, "/dev/null", O_RDONLY, 0) == 0,
+              posix_spawn_file_actions_adddup2(&fileActions, stdoutFD, STDOUT_FILENO) == 0,
+              posix_spawn_file_actions_adddup2(&fileActions, stderrFD, STDERR_FILENO) == 0,
+              posix_spawn_file_actions_addclose(&fileActions, stdoutFD) == 0,
+              posix_spawn_file_actions_addclose(&fileActions, stderrFD) == 0
+        else {
+            throw CommandError.launchFailed("could not prepare the child's file descriptors")
+        }
+
+        var attributes: posix_spawnattr_t? = nil
+        guard posix_spawnattr_init(&attributes) == 0 else {
+            throw CommandError.launchFailed("could not prepare spawn attributes")
+        }
+        defer {
+            posix_spawnattr_destroy(&attributes)
+        }
+
+        guard posix_spawnattr_setflags(
+                  &attributes,
+                  Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF)
+              ) == 0,
+              posix_spawnattr_setpgroup(&attributes, 0) == 0
+        else {
+            throw CommandError.launchFailed("could not prepare the child's process group")
+        }
+
+        // The parent may have SIGTERM blocked or ignored (test runners and app
+        // hosts sometimes do). Reset the mask and disposition so the grace
+        // period actually gives the child a chance to exit before SIGKILL.
+        var emptyMask = sigset_t()
+        sigemptyset(&emptyMask)
+        var defaultSignals = sigset_t()
+        sigemptyset(&defaultSignals)
+        sigaddset(&defaultSignals, SIGTERM)
+        guard posix_spawnattr_setsigmask(&attributes, &emptyMask) == 0,
+              posix_spawnattr_setsigdefault(&attributes, &defaultSignals) == 0
+        else {
+            throw CommandError.launchFailed("could not reset the child's signal state")
+        }
+
+        let argv = try Self.makeCStringArray([command.executable.path] + command.arguments)
+        defer {
+            Self.freeCStringArray(argv)
+        }
+        let envp = try Self.makeCStringArray(
+            command.environment.map { "\($0.key)=\($0.value)" }.sorted()
+        )
+        defer {
+            Self.freeCStringArray(envp)
+        }
+
+        var pid: pid_t = 0
+        let spawnResult = argv.withUnsafeBufferPointer { argvBuffer in
+            envp.withUnsafeBufferPointer { envBuffer in
+                command.executable.path.withCString { pathPointer in
+                    posix_spawn(
+                        &pid,
+                        pathPointer,
+                        &fileActions,
+                        &attributes,
+                        argvBuffer.baseAddress,
+                        envBuffer.baseAddress
+                    )
                 }
-                let graceDeadline = Date().addingTimeInterval(terminationGracePeriod)
-                while process.isRunning && Date() < graceDeadline {
-                    Thread.sleep(forTimeInterval: 0.05)
-                }
-                if process.isRunning {
-                    _ = kill(process.processIdentifier, SIGKILL)
-                }
-                break
             }
-            Thread.sleep(forTimeInterval: 0.02)
         }
 
-        // Always reap the child before reading or throwing: leaving it running
-        // past the temporary-file cleanup would leak a zombie.
-        process.waitUntilExit()
+        guard spawnResult == 0 else {
+            throw CommandError.launchFailed(
+                "\(command.executable.path): \(String(cString: strerror(spawnResult)))"
+            )
+        }
 
-        stdoutHandle.synchronizeFile()
-        stderrHandle.synchronizeFile()
-
-        if timedOut {
+        let outcome = try wait(for: pid, timeout: command.timeout)
+        if outcome.timedOut {
             throw CommandError.timedOut(seconds: command.timeout)
         }
 
         do {
             let stdout = try Data(contentsOf: stdoutURL)
             let stderr = try Data(contentsOf: stderrURL)
-            return CommandOutput(status: process.terminationStatus, stdout: stdout, stderr: stderr)
+            return CommandOutput(
+                status: Self.exitCode(from: outcome.status),
+                stdout: stdout,
+                stderr: stderr
+            )
         } catch {
             throw CommandError.launchFailed("could not read the captured output: \(error.localizedDescription)")
+        }
+    }
+
+    /// Waits for the child, escalating from SIGTERM to SIGKILL across its whole
+    /// process group when the deadline passes.
+    private func wait(for pid: pid_t, timeout: TimeInterval) throws -> (timedOut: Bool, status: Int32) {
+        var status: Int32 = 0
+        let deadline = Date().addingTimeInterval(timeout)
+
+        while true {
+            let result = waitpid(pid, &status, WNOHANG)
+            if result == pid {
+                return (false, status)
+            }
+            if result < 0 {
+                throw CommandError.launchFailed(
+                    "waitpid failed for \(pid): \(String(cString: strerror(errno)))"
+                )
+            }
+            if Date() >= deadline {
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.02)
+        }
+
+        // The child is the group leader, so a negative pid signals every helper
+        // it started. SIGTERM first, a short grace, then SIGKILL.
+        _ = kill(-pid, SIGTERM)
+        let graceDeadline = Date().addingTimeInterval(terminationGracePeriod)
+        while Date() < graceDeadline {
+            let result = waitpid(pid, &status, WNOHANG)
+            if result == pid {
+                return (true, status)
+            }
+            if result < 0 {
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.02)
+        }
+
+        _ = kill(-pid, SIGKILL)
+        let reaped = waitpid(pid, &status, 0)
+        if reaped < 0 {
+            throw CommandError.launchFailed(
+                "could not reap \(pid) after timeout: \(String(cString: strerror(errno)))"
+            )
+        }
+        return (true, status)
+    }
+
+    /// `waitpid` status follows the shell convention: 128 + signal for a
+    /// signal death, otherwise the exit code.
+    private static func exitCode(from status: Int32) -> Int32 {
+        let signal = status & 0x7f
+        if signal == 0 {
+            return (status >> 8) & 0xff
+        }
+        return 128 + signal
+    }
+
+    private static func makeCStringArray(_ strings: [String]) throws -> [UnsafeMutablePointer<CChar>?] {
+        var pointers: [UnsafeMutablePointer<CChar>?] = []
+        pointers.reserveCapacity(strings.count + 1)
+        for string in strings {
+            guard let pointer = strdup(string) else {
+                freeCStringArray(pointers)
+                throw CommandError.launchFailed("could not allocate command arguments")
+            }
+            pointers.append(pointer)
+        }
+        pointers.append(nil)
+        return pointers
+    }
+
+    private static func freeCStringArray(_ pointers: [UnsafeMutablePointer<CChar>?]) {
+        for pointer in pointers {
+            if let pointer {
+                free(pointer)
+            }
         }
     }
 }

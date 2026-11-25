@@ -4,6 +4,7 @@ public enum MKServiceError: Error, Sendable, Equatable, LocalizedError {
     case failed(status: Int32, detail: String)
     case invalidOutput(String)
     case noRules
+    case cleanTimedOut(seconds: TimeInterval)
 
     public var errorDescription: String? {
         switch self {
@@ -13,6 +14,9 @@ public enum MKServiceError: Error, Sendable, Equatable, LocalizedError {
             return "mk returned invalid JSON: \(detail)"
         case .noRules:
             return "No rules were selected for cleanup."
+        case .cleanTimedOut(let seconds):
+            return "Cleanup timed out after \(Int(seconds.rounded())) seconds. "
+                + "Some caches may already be removed; refresh to see what remains."
         }
     }
 }
@@ -50,10 +54,19 @@ public struct MKService: Sendable {
         guard !ids.isEmpty else {
             throw MKServiceError.noRules
         }
-        return try await execute(
-            arguments: ["clean", "--yes", "--only", ids.joined(separator: ","), "--json"],
-            timeout: 180
-        )
+        do {
+            return try await execute(
+                arguments: ["clean", "--yes", "--only", ids.joined(separator: ","), "--json"],
+                timeout: 180
+            )
+        } catch let error as CommandError {
+            if case .timedOut(let seconds) = error {
+                // A killed clean is not transactional. Say so instead of
+                // implying the cache state is unchanged.
+                throw MKServiceError.cleanTimedOut(seconds: seconds)
+            }
+            throw error
+        }
     }
 
     private func execute<T: Decodable>(arguments: [String], timeout: TimeInterval) async throws -> T {

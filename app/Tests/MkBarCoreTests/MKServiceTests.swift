@@ -213,6 +213,21 @@ struct MKServiceTests {
     }
 
 
+    @Test func cleanTimeoutExplainsPartialWork() async throws {
+        let service = makeService(runner: TimeoutRunner(seconds: 180))
+
+        do {
+            _ = try await service.clean(ruleIDs: ["npm-cache"])
+            Issue.record("Expected clean to throw")
+        } catch let error as MKServiceError {
+            #expect(error == .cleanTimedOut(seconds: 180))
+            #expect(error.localizedDescription.contains("180"))
+            #expect(error.localizedDescription.contains("may already be removed"))
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
     @Test func invalidJSONThrowsInvalidOutput() async throws {
         let runner = RecordingRunner(
             commandOutput: CommandOutput(status: 0, stdout: Data("not json".utf8), stderr: Data())
@@ -232,7 +247,7 @@ struct MKServiceTests {
         }
     }
 
-    private func makeService(runner: RecordingRunner) -> MKService {
+    private func makeService(runner: any CommandRunning) -> MKService {
         let locator = MKBinaries(
             environment: ["MK_BIN": mkPath, "PATH": "/usr/bin:/bin"],
             home: URL(fileURLWithPath: "/Users/tester"),
@@ -243,6 +258,19 @@ struct MKServiceTests {
 
     private static func successOutput(_ data: Data) -> CommandOutput {
         CommandOutput(status: 0, stdout: data, stderr: Data())
+    }
+}
+
+/// A runner that simulates the timeout path without launching a process.
+actor TimeoutRunner: CommandRunning {
+    private let seconds: TimeInterval
+
+    init(seconds: TimeInterval) {
+        self.seconds = seconds
+    }
+
+    func run(_ command: Command) async throws -> CommandOutput {
+        throw CommandError.timedOut(seconds: seconds)
     }
 }
 

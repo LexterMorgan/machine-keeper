@@ -82,9 +82,10 @@ The header reports when numbers were read, not how they compare.
   means no filter and would widen the set.
 - Stale ids fail closed: `selectRules` throws on unknown ids before `clean`
   starts; Refresh recovers.
-- A killed or timed-out clean is not transactional. The runner terminates the
-  child and escalates to SIGKILL after a grace period; descendants and
-  half-finished work are not rolled back. Re-run to finish.
+- A killed or timed-out clean is not transactional. The runner signals the
+  child's process group (SIGTERM, then SIGKILL after a grace period); a detached
+  child can escape, and half-finished work is not rolled back. The app says a
+  timed-out clean may be partial; re-run to finish.
 
 ## Design
 

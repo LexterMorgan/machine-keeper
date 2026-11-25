@@ -221,6 +221,50 @@ struct ProcessCommandRunnerTests {
         #expect(entries(in: root).isEmpty)
     }
 
+    @Test func timeoutKillsDescendantsInTheProcessGroup() async throws {
+        let root = try makeScratchRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pidFile = root.appendingPathComponent("grandchild")
+        let runner = ProcessCommandRunner(temporaryRoot: root, terminationGracePeriod: 0.2)
+        // Ignore SIGTERM in both the shell and the sleep it starts, so only a
+        // process-group SIGKILL can end the tree.
+        let script = "trap '' TERM; /bin/sleep 30 & echo $! > '\(pidFile.path)'; wait"
+
+        do {
+            _ = try await runner.run(
+                Command(
+                    executable: URL(fileURLWithPath: "/bin/sh"),
+                    arguments: ["-c", script],
+                    environment: ["PATH": "/usr/bin:/bin"],
+                    timeout: 0.5
+                )
+            )
+            Issue.record("Expected the runner to time out")
+        } catch let error as CommandError {
+            guard case .timedOut = error else {
+                Issue.record("Expected timedOut, got \(error)")
+                return
+            }
+        }
+
+        let text = try String(contentsOf: pidFile, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let pid = try #require(Int32(text))
+        defer {
+            _ = kill(pid, SIGKILL)
+        }
+
+        var gone = false
+        for _ in 0..<60 {
+            if kill(pid, 0) == -1 {
+                gone = true
+                break
+            }
+            usleep(50_000)
+        }
+        #expect(gone, "grandchild sleep survived the process-group timeout")
+    }
+
     @Test func timedOutChildIsNotLeftAsAZombie() async throws {
         let root = try makeScratchRoot()
         defer { try? FileManager.default.removeItem(at: root) }
