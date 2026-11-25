@@ -26,8 +26,10 @@ jobs:
 
   # SwiftPM plus the hand-assembled bundle. Node is here only because the
   # Makefile reads package.json for the bundle version; mk is not needed.
+  # macOS 15 is pinned because the package's deployment target is macOS 15 and
+  # the image ships Swift 6; `macos-latest` can drift ahead of both.
   app:
-    runs-on: macos-latest
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
