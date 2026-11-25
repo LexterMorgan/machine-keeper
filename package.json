@@ -1,0 +1,45 @@
+{
+  "name": "machine-keeper",
+  "version": "0.1.0",
+  "description": "Audit and safely reclaim disk space on macOS dev machines. Allowlist rules, dry-run by default, no sudo.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Michael Alexander",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "mk": "bin/mk.mjs",
+    "machine-keeper": "bin/mk.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "rules.default.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/",
+    "report": "node bin/mk.mjs report",
+    "startup": "node bin/mk.mjs startup"
+  },
+  "keywords": [
+    "macos",
+    "disk-space",
+    "cleanup",
+    "developer-tools",
+    "cache",
+    "startup-items",
+    "low-end",
+    "8gb"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LexterMorgan/machine-keeper.git"
+  },
+  "homepage": "https://github.com/LexterMorgan/machine-keeper#readme",
+  "bugs": {
+    "url": "https://github.com/LexterMorgan/machine-keeper/issues"
+  }
+}
