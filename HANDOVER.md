@@ -19,19 +19,21 @@ is enough, no Xcode.
 ## Status
 
 - Engine complete and working: `report`, `clean`, `startup`, `rules`,
-  `schedule`. 17 rules; 40 Node tests passing.
+  `schedule`. 17 rules; 47 Node tests passing.
 - `mk report --json` and `mk clean --json` carry `schemaVersion: 1`;
   `test/report-json.test.mjs` pins the consumer contract. The pin is now the
   literal `1`, not just `JSON_SCHEMA_VERSION` echoing itself, and clean stdout
   is exercised end-to-end: a real `main(["clean", "--json"])` run is parsed as
   one JSON document, with the seeded cache asserted still in place.
 - Audit fixes are in: clean passes `--json` so the app's decode path actually
-  runs, and the Swift byte formatter matches `src/bytes.mjs` rounding.
+  runs, the Swift byte formatter matches `src/bytes.mjs` rounding, and the
+  engine fails closed when `pgrep` cannot answer (unknown is treated as running).
+  `risk: "user-files"` now requires `optIn: true` at validation time.
 - Menu-bar app in `app/`: `LSUIElement`, menu bar only, no Dock icon. Every
   60 s it runs `mk report --json`; preview is `mk clean --json`; clean is
   `mk clean --yes --only <safe ids> --json`, and it decodes the JSON result.
   It contains no rules, paths, or deletion code.
-- 65 Swift tests passing (`swift test --package-path app`), written with Swift
+- 67 Swift tests passing (`swift test --package-path app`), written with Swift
   Testing because this machine's CommandLineTools has no XCTest.
 - CI covers the CLI matrix (macOS + Ubuntu, Node 20 and 22) and, separately,
   builds and tests the app on macOS.
@@ -45,10 +47,10 @@ is enough, no Xcode.
 Verify before changing anything:
 
 ```bash
-node --test test/                  # must stay 40/40 or grow
+node --test test/                  # must stay 47/47 or grow
 node bin/mk.mjs report             # real, read-only output
 node bin/mk.mjs clean              # dry run, nothing deleted
-swift test --package-path app      # must stay 65/65 or grow
+swift test --package-path app      # must stay 67/67 or grow
 make app                           # hand-built bundle; open dist/MachineKeeper.app
 ```
 
@@ -66,7 +68,7 @@ make app                           # hand-built bundle; open dist/MachineKeeper.
 | `src/startup.mjs` | launch agents/daemons, orphan detection, login items |
 | `src/schedule.mjs` | monthly launchd report (never cleans) |
 | `rules.default.json` | the allowlist; rules are data, not code |
-| `test/` | 40 Node tests; temp homes only, no real-home writes |
+| `test/` | 47 Node tests; temp homes only, no real-home writes |
 | `test/report-json.test.mjs` | contract test: pins the literal `schemaVersion` and the report/clean `--json` shapes |
 | `app/` | SwiftPM package: `MkBar` menu-bar executable, `MkBarCore` logic, Swift tests |
 | `app/README.md` | app architecture, state model, safety, and design narration |
@@ -123,11 +125,12 @@ make app                           # hand-built bundle; open dist/MachineKeeper.
 - **No login-item toggle.** The app does not install a launch agent; launch it
   manually or add it in System Settings.
 - **Notch panel deferred.** The menu bar is the only surface for now.
-- **A cancelled or timed-out clean is not transactional.** The app's process
-  runner does not observe Swift task cancellation, so a cancelled clean still
-  runs to its timeout; a timeout kills only the direct `mk` child, not its
-  descendants; and a killed clean can stop half-done with no rollback. Worst
-  case is a partial clean of allowlisted caches — re-run to finish.
+- **A cancelled or timed-out clean is not transactional.** The runner signals
+  the child's whole process group on timeout (SIGTERM, then SIGKILL), but it
+  does not observe Swift task cancellation, and a killed clean can stop
+  half-done with no rollback. The app says so when a clean times out; re-run to
+  finish. A descendant that deliberately detaches into a new process group can
+  still escape.
 - **Stale safe ids fail closed.** The app sends the ids from its last report; if
   the registry changed since, the CLI rejects the request before deleting
   anything. That is a visible error and one Refresh away, not a partial clean.
