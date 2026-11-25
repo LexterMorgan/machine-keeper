@@ -23,3 +23,21 @@ jobs:
       - name: Smoke test the CLI
         if: matrix.os == 'macos-latest'
         run: node bin/mk.mjs rules
+
+  # SwiftPM plus the hand-assembled bundle. Node is here only because the
+  # Makefile reads package.json for the bundle version; mk is not needed.
+  app:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test the Swift package
+        run: swift test --package-path app
+      - name: Build the app bundle
+        run: make app
+      - name: Verify the bundle layout
+        run: |
+          test -x "dist/MachineKeeper.app/Contents/MacOS/MachineKeeper"
+          test -f "dist/MachineKeeper.app/Contents/Info.plist"

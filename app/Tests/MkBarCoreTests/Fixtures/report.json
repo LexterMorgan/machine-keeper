@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-25T14:38:00.704Z",
+  "home": "/Users/tester",
+  "disk": {
+    "totalBytes": 245107195904,
+    "usedBytes": 147955281920,
+    "freeBytes": 52048601088,
+    "percent": "74%"
+  },
+  "memory": {
+    "swap": {
+      "totalBytes": 4294967296,
+      "usedBytes": 2589657661,
+      "freeBytes": 1705309635
+    },
+    "pressureLevel": 2,
+    "pressureLabel": "warning",
+    "wiredBytes": 1508081664,
+    "compressorBytes": 3024879616,
+    "freeBytes": 59850752
+  },
+  "rows": [
+    {
+      "id": "voice-memos-cache",
+      "title": "Voice Memos cache",
+      "risk": "rebuild",
+      "optIn": false,
+      "app": null,
+      "appRunning": false,
+      "reclaim": "Voice Memos re-creates its playback cache on demand.",
+      "bytes": 297222144,
+      "files": 2
+    },
+    {
+      "id": "npm-cache",
+      "title": "npm cache",
+      "risk": "rebuild",
+      "optIn": false,
+      "app": null,
+      "appRunning": false,
+      "reclaim": "Packages are re-downloaded on demand.",
+      "bytes": 297222144,
+      "files": 1
+    },
+    {
+      "id": "pip-cache",
+      "title": "pip cache",
+      "risk": "rebuild",
+      "optIn": false,
+      "app": null,
+      "appRunning": false,
+      "reclaim": "Python wheels are re-downloaded.",
+      "bytes": 9072640,
+      "files": 1
+    },
+    {
+      "id": "spotify-cache",
+      "title": "Spotify cache",
+      "risk": "rebuild",
+      "optIn": false,
+      "app": "Spotify",
+      "appRunning": true,
+      "reclaim": "Artwork and audio re-stream. Offline downloads are lost.",
+      "bytes": 8823283712,
+      "files": 1
+    },
+    {
+      "id": "huggingface-cache",
+      "title": "Hugging Face model cache",
+      "risk": "user-files",
+      "optIn": true,
+      "app": null,
+      "appRunning": false,
+      "reclaim": "Downloaded models are removed and re-download later.",
+      "bytes": 147955712,
+      "files": 1
+    }
+  ],
+  "optInRows": [
+    {
+      "id": "huggingface-cache",
+      "title": "Hugging Face model cache",
+      "risk": "user-files",
+      "optIn": true,
+      "app": null,
+      "appRunning": false,
+      "reclaim": "Downloaded models are removed and re-download later.",
+      "bytes": 147955712,
+      "files": 1
+    }
+  ],
+  "sweepableBytes": 603516928,
+  "blockedBytes": 8823283712,
+  "optInBytes": 147955712,
+  "startup": {
+    "userAgents": [
+      {
+        "label": "com.9router.autostart",
+        "file": "/Users/tester/Library/LaunchAgents/com.9router.autostart.plist",
+        "program": "/Users/tester/.hermes/node/bin/node",
+        "status": "present"
+      },
+      {
+        "label": "com.lwouis.alt-tab-macos",
+        "file": "/Users/tester/Library/LaunchAgents/com.lwouis.alt-tab-macos.plist",
+        "program": "/Applications/AltTab.app/Contents/MacOS/AltTab",
+        "status": "missing"
+      },
+      {
+        "label": "com.google.keystone.agent",
+        "file": "/Users/tester/Library/LaunchAgents/com.google.keystone.agent.plist",
+        "program": null,
+        "status": "unknown"
+      }
+    ],
+    "systemAgents": [
+      {
+        "label": "com.microsoft.OneDriveStandaloneUpdater",
+        "file": "/Library/LaunchAgents/com.microsoft.OneDriveStandaloneUpdater.plist",
+        "program": "/Applications/OneDrive.app/Contents/StandaloneUpdater.app/Contents/MacOS/OneDriveStandaloneUpdater",
+        "status": "present"
+      }
+    ],
+    "systemDaemons": [
+      {
+        "label": "com.apphousekitchen.aldente-pro.helper",
+        "file": "/Library/LaunchDaemons/com.apphousekitchen.aldente-pro.helper.plist",
+        "program": "/Library/PrivilegedHelperTools/com.apphousekitchen.aldente-pro.helper",
+        "status": "present"
+      }
+    ],
+    "loginItems": null,
+    "brewServices": null
+  }
+}

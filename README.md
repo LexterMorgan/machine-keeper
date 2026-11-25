@@ -71,6 +71,32 @@ mk schedule --install    # monthly report via launchd (never cleans)
 mk schedule --uninstall
 ```
 
+## Menu-bar app (optional)
+
+`app/` is a thin SwiftUI menu-bar app. Every 60 seconds it runs `mk report --json`
+and renders that result: disk, swap, memory pressure, the top reclaimable rules,
+and orphaned startup items. It does not reimplement rules, paths, or deletion;
+cleaning is `mk clean --yes --only <safe rule ids> --json`, whose JSON result it
+decodes.
+
+Requires macOS 15 and a Swift 6 toolchain. CommandLineTools is enough — there is
+no Xcode project and `xcodebuild` is not used.
+
+```bash
+make app                  # release build + hand-assembled bundle in dist/
+open dist/MachineKeeper.app
+
+make app-run              # same, launched from the terminal
+make app-test             # Swift tests
+MK_BIN=/path/to/mk make app-run
+```
+
+The bundle is `LSUIElement` (menu bar only, no Dock icon), ad-hoc signed, and
+not notarized; build it locally. `mk` must be installed (`npm link`) or `MK_BIN`
+must point at the executable. If `mk` cannot be found the app shows the error
+and the setup hint instead of crashing. See [app/README.md](app/README.md) for
+the architecture, state model, and design decisions.
+
 ## Safety model
 
 This is a deletion tool, so the boring parts are the design:
@@ -111,9 +137,46 @@ The only permanent loss is what the rule says: rebuildable caches, and — when 
 
 `mk startup` lists user launch agents, system agents and daemons, login items, and Homebrew services, and flags plists whose `Program` no longer exists — the usual leftover when an app is dragged to the trash. It reports; it does not unload anything.
 
+## JSON boundary
+
+`mk report --json` is the interface for faces such as the menu-bar app. It is
+versioned with `schemaVersion` (currently `1`), and changes are additive.
+
+Required top-level fields:
+
+| field | type | notes |
+|---|---|---|
+| `schemaVersion` | number | current `1`; bumped only for a removal or type change |
+| `generatedAt` | string | ISO 8601 |
+| `home` | string | home directory the report was built against |
+| `disk` | object or null | `totalBytes`, `usedBytes`, `freeBytes`, `percent` (string) |
+| `memory` | object or null | `swap` (`totalBytes`, `usedBytes`, `freeBytes`), `pressureLevel` (1 normal, 2 warning, 4 critical; other values unknown), `pressureLabel`, `wiredBytes`, `compressorBytes`, `freeBytes` |
+| `rows` | array | every rule, opt-in included |
+| `optInRows` | array | subset of `rows` with `optIn: true` |
+| `sweepableBytes` | number | non-opt-in rules that are not running |
+| `blockedBytes` | number | non-opt-in rules currently blocked by a running app |
+| `optInBytes` | number | bytes in opt-in rules |
+| `startup` | object | `userAgents`, `systemAgents`, `systemDaemons` arrays of `{label, file, program, status}`; `loginItems` array or null; `brewServices` array or null; `status` is `present`, `missing`, or `unknown` |
+
+Each row is `{id, title, risk, optIn, app, appRunning, reclaim, bytes, files}`:
+`app` is the owning app's name or null; `appRunning` says whether it is running
+now, which is what blocks the rule. `reclaim` is the human note shown next to
+the rule.
+
+`disk` and `memory` are null when measurement fails; the report still returns
+rows. Bytes are JSON numbers in the 64-bit integer range, not strings.
+
+`mk clean --json` (dry run) and `mk clean --yes --json` (real run) return
+`{schemaVersion, dryRun, results, freedBytes}`. Each result is
+`{id, title, bytes, status, error?}` with status `removed`, `would-remove`,
+`skipped-app-running`, `opt-in-skipped`, `error`, or `missing`.
+
+Consumers must ignore unknown keys. The exact contract is pinned by
+`test/report-json.test.mjs`; change that test and this section together.
+
 ## Roadmap
 
-- Menu-bar app: `mk report --json` rendered as a small SwiftUI panel with live disk and swap.
+- Notch-overlay panel, if the menu bar proves useful enough to want at a glance.
 - Linux support: same rule model, different paths and metrics.
 - More rule coverage: Docker/Colima images, simulator runtimes, additional language caches.
 
