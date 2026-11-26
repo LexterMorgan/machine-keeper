@@ -73,11 +73,18 @@ mk schedule --uninstall
 
 ## Menu-bar app (optional)
 
-`app/` is a thin SwiftUI menu-bar app. Every 60 seconds it runs `mk report --json`
-and renders that result: disk, swap, memory pressure, the top reclaimable rules,
-and orphaned startup items. It does not reimplement rules, paths, or deletion;
-cleaning is `mk clean --yes --only <safe rule ids> --json`, whose JSON result it
-decodes.
+`app/` is a thin SwiftUI menu-bar app. By default it runs `mk report --json`
+every 60 seconds and renders that result: disk, swap, memory pressure, the top
+reclaimable rules, and orphaned startup items. Settings can switch to 5 minutes
+or manual refresh, change the menu-bar label, register a login item, and enable
+low-disk or critical-pressure notifications.
+
+An **All Rules** window lists every measured rule grouped as safe, blocked by a
+running app, or opt-in, plus orphaned startup entries with a Reveal action.
+Opt-in rules are cleaned only from that window, one rule at a time, behind an
+explicit confirmation that spells out the user-files risk; clean safe never
+passes `--include-opt-in`. Every delete is still `mk clean ... --json`, whose
+result the app decodes. The app does not reimplement rules, paths, or deletion.
 
 Requires macOS 15 and a Swift 6 toolchain. CommandLineTools is enough — there is
 no Xcode project and `xcodebuild` is not used.
@@ -169,7 +176,9 @@ rows. Bytes are JSON numbers in the 64-bit integer range, not strings.
 `mk clean --json` (dry run) and `mk clean --yes --json` (real run) return
 `{schemaVersion, dryRun, results, freedBytes}`. Each result is
 `{id, title, bytes, status, error?}` with status `removed`, `would-remove`,
-`skipped-app-running`, `opt-in-skipped`, `error`, or `missing`.
+`skipped-app-running`, `opt-in-skipped`, `error`, or `missing`. Adding
+`--include-opt-in` widens the selection to opt-in rules; the app sends it only
+for a rule the user selected explicitly in All Rules, and never for Clean safe.
 
 Consumers must ignore unknown keys. The exact contract is pinned by
 `test/report-json.test.mjs`; change that test and this section together.

@@ -3,7 +3,7 @@
 State of the project for the next person or session. Keep this current; it is
 the cheapest way to transfer context that would otherwise live in a chat log.
 
-Last updated: 2026-11-25, menu-bar app added; core audit applied.
+Last updated: 2026-11-26, menu-bar app with settings, All Rules, and notifications.
 
 ## What this is
 
@@ -29,11 +29,17 @@ is enough, no Xcode.
   runs, the Swift byte formatter matches `src/bytes.mjs` rounding, and the
   engine fails closed when `pgrep` cannot answer (unknown is treated as running).
   `risk: "user-files"` now requires `optIn: true` at validation time.
-- Menu-bar app in `app/`: `LSUIElement`, menu bar only, no Dock icon. Every
-  60 s it runs `mk report --json`; preview is `mk clean --json`; clean is
-  `mk clean --yes --only <safe ids> --json`, and it decodes the JSON result.
-  It contains no rules, paths, or deletion code.
-- 67 Swift tests passing (`swift test --package-path app`), written with Swift
+- Menu-bar app in `app/`: `LSUIElement`, menu bar only, no Dock icon. It runs
+  `mk report --json` every 60 s by default (Settings: 5 min, manual, or pause);
+  preview is `mk clean --json`; Clean safe is
+  `mk clean --yes --only <safe ids> --json`. It contains no rules, paths, or
+  deletion code.
+- App surface: Settings (refresh, menu-bar label, launch at login via
+  `SMAppService`, notifications), an All Rules window (safe/blocked/opt-in
+  groups, startup orphans with Reveal), explicit per-rule opt-in cleaning behind
+  a confirmation, and a header quick-actions menu. Notifications are off by
+  default and request permission only from Settings.
+- 73 Swift tests passing (`swift test --package-path app`), written with Swift
   Testing because this machine's CommandLineTools has no XCTest.
 - CI covers the CLI matrix (macOS + Ubuntu, Node 20 and 22) and, separately,
   builds and tests the app on macOS.
@@ -50,7 +56,7 @@ Verify before changing anything:
 node --test test/                  # must stay 47/47 or grow
 node bin/mk.mjs report             # real, read-only output
 node bin/mk.mjs clean              # dry run, nothing deleted
-swift test --package-path app      # must stay 67/67 or grow
+swift test --package-path app      # must stay 73/73 or grow
 make app                           # hand-built bundle; open dist/MachineKeeper.app
 ```
 
@@ -72,6 +78,7 @@ make app                           # hand-built bundle; open dist/MachineKeeper.
 | `test/report-json.test.mjs` | contract test: pins the literal `schemaVersion` and the report/clean `--json` shapes |
 | `app/` | SwiftPM package: `MkBar` menu-bar executable, `MkBarCore` logic, Swift tests |
 | `app/README.md` | app architecture, state model, safety, and design narration |
+| `app/Sources/MkBar/` | panel, Settings, All Rules, settings/notifications, menu-bar scenes |
 | `app/Info.plist` | bundle metadata: `LSUIElement`, macOS 15 minimum, version |
 | `Makefile` | `test`, `app` (hand-built bundle), `app-run`, `app-test`, `app-clean` |
 
@@ -89,6 +96,9 @@ make app                           # hand-built bundle; open dist/MachineKeeper.
   previews `mk clean --json`, and deletes only through
   `mk clean --yes --only <ids> --json` with ids the report returned. Choosing
   safe rows is allowed; inventing ids or paths is not.
+- **Opt-in deletion is explicit.** `--include-opt-in` is sent only for a single
+  opt-in rule the user selected in All Rules, after a confirmation whose default
+  is Cancel. Clean safe filters opt-in ids and never sends the flag.
 
 ## Decisions already made
 
@@ -122,9 +132,14 @@ make app                           # hand-built bundle; open dist/MachineKeeper.
 - **No git remote.** `github.com/LexterMorgan/machine-keeper` is the intended
   home; neither the CLI nor the app is published, and there is no npm publish
   (`npm link` is the install path).
-- **No login-item toggle.** The app does not install a launch agent; launch it
-  manually or add it in System Settings.
-- **Notch panel deferred.** The menu bar is the only surface for now.
+- **Launch at login is untested on this ad-hoc build.** The Settings toggle uses
+  `SMAppService.mainApp`; macOS may require a signed bundle and Login Items
+  approval, and the UI surfaces the error if registration fails.
+- **Notifications are permission-gated.** They are off by default, request
+  permission only from Settings, and were not delivered in automated checks; a
+  bare `swift run` no-ops because `UNUserNotificationCenter` needs an app bundle.
+- **Notch panel deferred.** The menu bar plus Settings/All Rules windows are the
+  surfaces for now.
 - **A cancelled or timed-out clean is not transactional.** The runner signals
   the child's whole process group on timeout (SIGTERM, then SIGKILL), but it
   does not observe Swift task cancellation, and a killed clean can stop

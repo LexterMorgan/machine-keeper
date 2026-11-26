@@ -1,7 +1,8 @@
 # Menu-bar app
 
-A SwiftUI `MenuBarExtra` that shows what `mk` already knows. `mk` is the engine;
-the app is a face, and that boundary is the design.
+A SwiftUI `MenuBarExtra` that shows what `mk` already knows, plus a Settings
+window and an **All Rules** window. `mk` is the engine; the app is a face, and
+that boundary is the design.
 
 **The one rule:** nothing under `app/` defines a cache, a target path, or a
 deletion. The app runs `mk`, decodes the versioned JSON in the root README's
@@ -32,6 +33,8 @@ MenuBarExtra (.window)
 read and call it. An in-flight guard drops overlapping reads, and polling pauses
 during a clean or preview so a poll cannot replace the numbers being acted on;
 process work and decoding run off-main, and the main actor only assigns.
+Settings control the automatic interval (60 s, 5 min, or manual), a pause
+switch, the menu-bar label, login-item registration, and notifications.
 
 `mk` is resolved per call: `MK_BIN`, then `PATH`, then install directories
 (Homebrew, npm global, Volta, Bun, Cargo, asdf, mise, pnpm). The child gets a
@@ -61,6 +64,12 @@ The panel shows the last thing it actually knows.
 - **Nothing reclaimable:** "Nothing safe to clean right now" with the reason
   (caches empty, or held by running apps); no-op actions disable and an open
   confirmation closes itself.
+- **Settings:** interval and pause apply immediately; the menu-bar label can be
+  icon-only or icon plus free space (the latter may be hidden behind a notch);
+  launch-at-login is registered through `SMAppService` only when toggled.
+- **Notifications:** off by default. Enabling asks macOS for permission from
+  Settings, never on launch; pressure-critical and low-disk alerts use the real
+  report values and a six-hour cooldown, with separate transitions.
 
 Every number comes from the report or clean result: no estimates, deltas, or
 trend arrows. "Frees about X" is the report-time total; the clean re-measures.
@@ -73,6 +82,10 @@ The header reports when numbers were read, not how they compare.
   Clean acts on all of them.
 - The app forwards only ids from the report; it never builds a path, enumerates
   a directory, or checks for a cache.
+- **Opt-in cleaning is explicit and per-rule.** All Rules separates opt-in rows;
+  each Clean… confirmation shows the size, risk, and reclaim note, defaults to
+  Cancel, and only then sends that one id with `--include-opt-in`. Clean safe
+  filters opt-in ids twice and never passes the flag.
 - Deleting takes a confirmation: Cancel is the default button, Clean is
   destructive and red, so a stray Return cannot delete.
 - The engine re-checks at clean time: a row that became opt-in or whose app
@@ -97,7 +110,8 @@ free? Anything that does not serve that answer is absent.
   pressure) → detail (largest safe rules, startup orphans) → actions → outcome →
   preview. When the decision is "nothing", the headline says so and actions
   disable.
-- **Color:** one accent on the usage bar and the prominent action; otherwise
+- **Color:** one accent on the usage bar and the prominent action; Preview is
+  secondary and only Clean is filled. Otherwise
   color marks state only: orange for a read error, red for the destructive step,
   green/yellow/red/gray on the pressure dot. The dot sits beside "Pressure:
   warning", repeats into the accessibility value, and is hidden from VoiceOver
@@ -108,11 +122,17 @@ free? Anything that does not serve that answer is absent.
   Rule ids are monospaced because they are identifiers, not terminal theatre.
 - **Geometry:** 340 pt fixed width, a 54 pt label column, 12 pt padding; sizes
   right-align. A glance, not a window.
-- **Accessibility and keyboard:** the menu bar item exposes one spoken label
-  combining name and free space, not a bare glyph. Disk and memory rows expose
-  label and value; rule rows read title, size, and reclaim note as a hint;
-  preview rows include status. Busy controls are disabled and keep their labels.
-  Cmd-R refreshes; Return takes the read-only action and cancels the confirmation.
+- **Accessibility and keyboard:** the menu bar item is icon-only by default for notch
+  safety, with one spoken label combining name and free space. Disk and memory
+  rows expose label and value; rule rows read title, size, and reclaim note as a
+  hint; preview rows include status. Busy controls are disabled and keep their
+  labels. Cmd-R refreshes; Return opens the clean confirmation, then cancels it,
+  so a stray Return cannot delete. The header menu carries refresh, preview,
+  clean, All Rules, Settings, and Quit; Settings and All Rules are also reachable
+  from the panel without hunting.
+- **Windows:** All Rules is a 560 pt utility window with safe/blocked/opt-in
+  groups and startup orphans; Settings is a 440 pt grouped form. Both stay
+  native, use the same type/palette, and never open at launch.
 
 ## Build and test
 
@@ -125,18 +145,18 @@ formatting), `MkBar` (app and views), and `MkBarCoreTests`. Swift 6, macOS 15.
   Local build: not notarized, not published.
 - `make app-run` launches the bundle's binary from the terminal so `MK_BIN` is
   inherited; a Finder launch gets launchd's minimal environment.
-- `make app-test`, or `swift test --package-path app`. Swift Testing, because
-  this toolchain ships no XCTest. Core tests use the fixture report and a
-  recording fake runner; no real `mk` or cache is touched.
+- `make app-test`, or `swift test --package-path app` (**73 tests**). Swift
+  Testing, because this toolchain ships no XCTest. Core tests use the fixture
+  report and a recording fake runner; no real `mk` or cache is touched.
 - When the JSON changes, the fixture and the root README's contract change
   together; this app consumes the contract rather than duplicating it.
 
 ## Non-goals
 
 - **Notch overlay.** Not now; any second face must consume the same JSON.
-- **Settings.** The interval and safe-row filter are the design, not preferences.
-- **Login item.** None installed; add the app in System Settings.
 - **Rule editing.** Rules are engine-validated data; a UI would duplicate that.
+- **Scheduling opt-in cleans.** Opt-in runs are always a human click on a
+  confirmed row; nothing is included automatically.
 - **Deletion, discovery, or paths in Swift.** The one rule again, and the reason
   the core stays testable.
 
