@@ -81,7 +81,11 @@ export async function assertDeletable(
   if (relative === "") {
     throw new Error("refusing to delete the home directory itself");
   }
-  if (relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+  if (
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relative)
+  ) {
     throw new Error(`deletion target escapes home after resolving symlinks: ${absolutePath}`);
   }
 

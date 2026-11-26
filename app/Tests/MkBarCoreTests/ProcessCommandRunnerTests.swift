@@ -286,21 +286,37 @@ struct ProcessCommandRunnerTests {
         )
         // The leader exits on SIGTERM. The helper ignores SIGTERM and records
         // its own pid, so the timeout must SIGKILL the surviving group member.
+        let timeout: TimeInterval = 1.0
+        let grace: TimeInterval = 0.3
+        let started = Date()
         let script = """
         trap 'exit 0' TERM
         /bin/sh -c 'trap "" TERM; echo $$ > "\(helperPIDFile.path)"; while :; do /bin/sleep 1; done' &
         wait
         """
 
-        do {
-            _ = try await runner.run(
+        let runTask = Task {
+            try await runner.run(
                 Command(
                     executable: URL(fileURLWithPath: "/bin/sh"),
                     arguments: ["-c", script],
                     environment: ["PATH": "/usr/bin:/bin"],
-                    timeout: 0.5
+                    timeout: timeout
                 )
             )
+        }
+
+        // Wait for the helper to be ready while the timeout clock is running,
+        // so this test cannot pass merely because the helper never started.
+        do {
+            helperPID = try waitForPIDFile(helperPIDFile, timeout: 1.5)
+        } catch {
+            _ = try? await runTask.value
+            throw error
+        }
+
+        do {
+            _ = try await runTask.value
             Issue.record("Expected the runner to time out")
         } catch let error as CommandError {
             guard case .timedOut = error else {
@@ -309,7 +325,8 @@ struct ProcessCommandRunnerTests {
             }
         }
 
-        helperPID = try waitForPIDFile(helperPIDFile)
+        let elapsed = Date().timeIntervalSince(started)
+        #expect(elapsed >= timeout + 0.2, "grace period was skipped: \(elapsed)s")
         guard let helperPID else {
             Issue.record("Helper never wrote its pid file")
             return

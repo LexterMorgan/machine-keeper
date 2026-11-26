@@ -339,3 +339,27 @@ test("a dry run never invokes a cleanup command", async () => {
     await rm(home, { recursive: true, force: true });
   }
 });
+
+test("a rule with one present and one missing alternate path still cleans the present one", async () => {
+  const home = await makeHome();
+  try {
+    const present = await seed(home, "Library/Caches/present", 700);
+    const missing = path.join(home, "Library", "Caches", "absent");
+
+    const result = await clean({
+      home,
+      rules: [
+        rule({
+          paths: ["Library/Caches/present", "Library/Caches/absent"],
+        }),
+      ],
+      dryRun: false,
+    });
+
+    assert.equal(result.results[0].status, "removed");
+    assert.equal(await exists(present), false);
+    assert.equal(await exists(missing), false);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});

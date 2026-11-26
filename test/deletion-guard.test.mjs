@@ -12,7 +12,11 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { clean } from "../src/clean.mjs";
-import { containsProtectedRelative, isProtectedRelative } from "../src/guard.mjs";
+import {
+  assertDeletable,
+  containsProtectedRelative,
+  isProtectedRelative,
+} from "../src/guard.mjs";
 
 async function makeHome() {
   return mkdtemp(path.join(os.tmpdir(), "mk-guard-home-"));
@@ -235,5 +239,34 @@ test("the actual home is resolved when home is reached through a symlink", async
   } finally {
     await rm(realHome, { recursive: true, force: true });
     await rm(aliasParent, { recursive: true, force: true });
+  }
+});
+
+test("a target resolving to exactly the home parent is refused", async () => {
+  const home = await makeHome();
+  try {
+    await assert.rejects(
+      assertDeletable(home, path.dirname(home)),
+      /escapes home/
+    );
+
+    const parentSentinel = path.join(path.dirname(home), "parent-sentinel");
+    await writeFile(parentSentinel, Buffer.alloc(16));
+    await symlink(path.dirname(home), path.join(home, "ParentLink"), "dir");
+    const calls = [];
+    const result = await clean({
+      home,
+      rules: [rule({ paths: ["ParentLink"] })],
+      dryRun: false,
+      measure: async () => 1,
+      remove: async (...args) => calls.push(args),
+    });
+    assert.equal(result.results[0].status, "error");
+    assert.match(result.results[0].error, /escapes home/);
+    assert.equal(calls.length, 0);
+    assert.equal(await exists(parentSentinel), true);
+    await rm(parentSentinel, { force: true });
+  } finally {
+    await rm(home, { recursive: true, force: true });
   }
 });

@@ -351,7 +351,7 @@
       ],
       "optIn": true,
       "risk": "user-files",
-      "reclaim": "Only for machines where Cursor is no longer installed. Removes chat history.",
+      "reclaim": "Intended for machines where Cursor is gone and closed. Removes chat history.",
       "app": "Cursor"
     },
     {

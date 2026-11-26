@@ -97,9 +97,14 @@ export async function clean({
       }
 
       // Validate before a tool-aware command can touch anything, then again
-      // just before each recursive removal. The second check narrows, but does
-      // not eliminate, the validation/deletion race documented in the README.
+      // just before each recursive removal. Missing alternate paths are
+      // normal (a rule may list several install locations) and measure zero;
+      // do not turn them into a per-rule ENOENT. The second check narrows, but
+      // does not eliminate, the validation/deletion race documented in README.
       for (const target of targets) {
+        if (!(await pathExists(target.absolute))) {
+          continue;
+        }
         await assertDeletable(home, target.absolute);
       }
 
