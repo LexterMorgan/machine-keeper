@@ -3,7 +3,7 @@
 State of the project for the next person or session. Keep this current; it is
 the cheapest way to transfer context that would otherwise live in a chat log.
 
-Last updated: 2026-11-26, menu-bar app with settings, All Rules, and notifications.
+Last updated: 2026-11-26, menu-bar app with settings, All Rules, notifications, and RAM metrics.
 
 ## What this is
 
@@ -49,7 +49,8 @@ is enough, no Xcode.
 - `MK_BIN` overrides `mk` discovery; otherwise the app checks `PATH` and common
   Homebrew, npm, and node-version-manager directories. A missing `mk` shows the
   error and setup hint instead of crashing.
-- Not notarized, no git remote, not published to npm.
+- Not notarized, not published to npm. Pushed to GitHub at
+  `github.com/LexterMorgan/machine-keeper`.
 
 Verify before changing anything:
 
@@ -130,9 +131,8 @@ make app                           # hand-built bundle; open dist/MachineKeeper.
 
 - **Not notarized.** `make app` ad-hoc signs; a downloadable build needs a
   Developer ID and notarization, or users build it locally.
-- **No git remote.** `github.com/LexterMorgan/machine-keeper` is the intended
-  home; neither the CLI nor the app is published, and there is no npm publish
-  (`npm link` is the install path).
+- **No npm publish.** `github.com/LexterMorgan/machine-keeper` is the home;
+  neither the CLI nor the app is on npm yet (`npm link` is the install path).
 - **Launch at login is untested on this ad-hoc build.** The Settings toggle uses
   `SMAppService.mainApp`; macOS may require a signed bundle and Login Items
   approval, and the UI surfaces the error if registration fails.
