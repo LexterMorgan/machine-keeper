@@ -55,7 +55,7 @@ is enough, no Xcode.
 Verify before changing anything:
 
 ```bash
-node --test test/                  # must stay 48/48 or grow
+node --test test/*.test.mjs                  # must stay 48/48 or grow
 node bin/mk.mjs report             # real, read-only output
 node bin/mk.mjs clean              # dry run, nothing deleted
 swift test --package-path app      # must stay 74/74 or grow

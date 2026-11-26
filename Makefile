@@ -10,7 +10,7 @@ VERSION := $(shell node -p "require('./package.json').version" 2>/dev/null || ec
 .PHONY: test app app-run app-test app-clean
 
 test:
-	node --test test/
+	node --test test/*.test.mjs
 
 # SwiftPM builds the executable; the bundle is assembled by hand because this
 # machine has CommandLineTools only (no xcodebuild). The bundle is staged and

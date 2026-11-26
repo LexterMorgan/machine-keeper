@@ -36,7 +36,7 @@ program that expects its index to exist.
 ## Testing
 
 ```bash
-node --test test/
+node --test test/*.test.mjs
 ```
 
 Unit tests must not touch the real home directory. Use `mkdtemp` and pass
