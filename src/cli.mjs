@@ -150,9 +150,15 @@ function printReport(report, out) {
   }
 
   if (report.memory) {
-    const { swap, pressureLabel, compressorBytes } = report.memory;
+    const { swap, pressureLabel, compressorBytes, totalBytes, usedBytes } = report.memory;
+    const ram =
+      totalBytes > 0
+        ? usedBytes == null
+          ? `RAM ${formatBytes(totalBytes)} · `
+          : `RAM ${formatBytes(usedBytes)} of ${formatBytes(totalBytes)} · `
+        : "";
     lines.push(
-      `Memory   swap ${formatBytes(swap.usedBytes)} of ${formatBytes(
+      `Memory   ${ram}swap ${formatBytes(swap.usedBytes)} of ${formatBytes(
         swap.totalBytes
       )} · pressure ${pressureLabel} · compressor ${formatBytes(compressorBytes)}`
     );

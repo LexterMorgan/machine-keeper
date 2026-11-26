@@ -5,6 +5,7 @@ import {
   diskInfo,
   memoryInfo,
   parseDf,
+  parsePageSize,
   parseSwap,
   parseVmStat,
   pressureLabel,
@@ -19,7 +20,10 @@ const SWAP =
 const VM_STAT = `Mach Virtual Memory Statistics: (page size of 16384 bytes)
 Pages free:                               3788.
 Pages active:                            87945.
+Pages purgeable:                             2.
 Pages wired down:                       134843.
+File-backed pages:                       54335.
+Anonymous pages:                         89430.
 Pages occupied by compressor:           174147.`;
 
 test("formatBytes scales and rounds", () => {
@@ -53,10 +57,13 @@ test("parseSwap converts megabytes and gigabytes", () => {
   assert.equal(parseSwap("total = 1.00G used = 0.50G free = 0.50G").totalBytes, 1024 ** 3);
 });
 
-test("parseVmStat and pressureLabel", () => {
+test("parseVmStat, parsePageSize, and pressureLabel", () => {
   const pages = parseVmStat(VM_STAT);
   assert.equal(pages["Pages wired down"], 134843);
   assert.equal(pages["Pages occupied by compressor"], 174147);
+  assert.equal(parsePageSize(VM_STAT), 16384);
+  assert.equal(parsePageSize("page size of 4096 bytes"), 4096);
+  assert.equal(parsePageSize("unknown"), 16384);
   assert.equal(pressureLabel(1), "normal");
   assert.equal(pressureLabel(2), "warning");
   assert.equal(pressureLabel(4), "critical");
@@ -81,6 +88,9 @@ test("diskInfo and memoryInfo use the injected runner", async () => {
     if (command === "sysctl" && args?.[0] === "vm.swapusage") {
       return { ok: true, stdout: SWAP, stderr: "" };
     }
+    if (command === "sysctl" && args?.[0] === "-n" && args?.[1] === "hw.memsize") {
+      return { ok: true, stdout: "8589934592\n", stderr: "" };
+    }
     if (command === "sysctl" && args?.[0] === "-n") {
       return { ok: true, stdout: "2\n", stderr: "" };
     }
@@ -93,6 +103,41 @@ test("diskInfo and memoryInfo use the injected runner", async () => {
   const memory = await memoryInfo({ runCmd: swapRun });
   assert.equal(memory.pressureLevel, 2);
   assert.equal(memory.pressureLabel, "warning");
+  assert.equal(memory.totalBytes, 8589934592);
   assert.equal(memory.wiredBytes, 134843 * 16384);
+  assert.equal(memory.compressorBytes, 174147 * 16384);
+  assert.equal(memory.appBytes, (89430 - 2) * 16384);
+  assert.equal(memory.cachedBytes, 54335 * 16384);
+  assert.equal(memory.usedBytes, (89430 - 2 + 134843 + 174147) * 16384);
+  assert.equal(memory.freeBytes, 3788 * 16384);
   assert.ok(memory.swap.usedBytes > 0);
+});
+
+test("memoryInfo uses null for counters macOS did not report", async () => {
+  const vmStat = `Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                               10.
+Pages wired down:                        20.
+Pages occupied by compressor:            30.`;
+
+  const memory = await memoryInfo({
+    runCmd: async (command, args) => {
+      if (command === "vm_stat") {
+        return { ok: true, stdout: vmStat, stderr: "" };
+      }
+      if (command === "sysctl" && args?.[0] === "-n") {
+        return {
+          ok: true,
+          stdout: args?.[1] === "hw.memsize" ? "8589934592\n" : "2\n",
+          stderr: "",
+        };
+      }
+      return { ok: true, stdout: "", stderr: "" };
+    },
+  });
+
+  assert.equal(memory.totalBytes, 8589934592);
+  assert.equal(memory.appBytes, null);
+  assert.equal(memory.cachedBytes, null);
+  assert.equal(memory.usedBytes, null);
+  assert.equal(memory.wiredBytes, 20 * 16384);
 });

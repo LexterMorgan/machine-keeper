@@ -67,6 +67,13 @@ export function parseVmStat(stdout) {
   return pages;
 }
 
+/** Parse the page size from the `vm_stat` header, falling back for odd output. */
+export function parsePageSize(stdout, fallback = DEFAULT_PAGE_SIZE) {
+  const match = /page size of ([0-9]+) bytes/.exec(String(stdout ?? ""));
+  const size = match ? Number(match[1]) : NaN;
+  return Number.isFinite(size) && size > 0 ? size : fallback;
+}
+
 function pageBytes(pages, key, pageSize) {
   return (pages[key] ?? 0) * pageSize;
 }
@@ -84,10 +91,11 @@ export async function diskInfo({ runCmd = defaultRun, volume = DEFAULT_VOLUME } 
 }
 
 export async function memoryInfo({ runCmd = defaultRun } = {}) {
-  const [swapResult, pressureResult, vmResult] = await Promise.all([
+  const [swapResult, pressureResult, vmResult, totalResult] = await Promise.all([
     runCmd("sysctl", ["vm.swapusage"]),
     runCmd("sysctl", ["-n", "kern.memorystatus_vm_pressure_level"]),
     runCmd("vm_stat", []),
+    runCmd("sysctl", ["-n", "hw.memsize"]),
   ]);
 
   const swap = swapResult.ok
@@ -96,17 +104,39 @@ export async function memoryInfo({ runCmd = defaultRun } = {}) {
   const parsedLevel = Number.parseInt(pressureResult.stdout.trim(), 10);
   const pressureLevel = Number.isFinite(parsedLevel) ? parsedLevel : 0;
   const pages = vmResult.ok ? parseVmStat(vmResult.stdout) : {};
+  const pageSize = parsePageSize(vmResult.stdout);
+  const totalBytes = totalResult.ok ? Number.parseInt(totalResult.stdout.trim(), 10) : 0;
+
+  const wiredBytes = pageBytes(pages, "Pages wired down", pageSize);
+  const compressorBytes = pageBytes(
+    pages,
+    "Pages occupied by compressor",
+    pageSize
+  );
+
+  // Activity Monitor's "Memory Used" is app + wired + compressed. Purgeable
+  // pages are excluded from app memory. These counters are not present on
+  // every macOS version, so null rather than a misleading zero.
+  const hasAnonymous = Object.hasOwn(pages, "Anonymous pages");
+  const appBytes = hasAnonymous
+    ? Math.max(pages["Anonymous pages"] - (pages["Pages purgeable"] ?? 0), 0) * pageSize
+    : null;
+  const cachedBytes = Object.hasOwn(pages, "File-backed pages")
+    ? pages["File-backed pages"] * pageSize
+    : null;
+  const usedBytes =
+    appBytes === null ? null : appBytes + wiredBytes + compressorBytes;
 
   return {
+    totalBytes: Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : 0,
+    usedBytes,
+    appBytes,
+    cachedBytes,
     swap,
     pressureLevel,
     pressureLabel: pressureLabel(pressureLevel),
-    wiredBytes: pageBytes(pages, "Pages wired down", DEFAULT_PAGE_SIZE),
-    compressorBytes: pageBytes(
-      pages,
-      "Pages occupied by compressor",
-      DEFAULT_PAGE_SIZE
-    ),
-    freeBytes: pageBytes(pages, "Pages free", DEFAULT_PAGE_SIZE),
+    wiredBytes,
+    compressorBytes,
+    freeBytes: pageBytes(pages, "Pages free", pageSize),
   };
 }

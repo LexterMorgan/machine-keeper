@@ -10,7 +10,7 @@ $ mk
 machine-keeper 0.1.0 — 2026-11-25 14:12
 
 Disk     137 GB used · 49.1 GB free (74% full)
-Memory   swap 2.58 GB of 4.00 GB · pressure warning · compressor 2.94 GB
+Memory   RAM 12.4 GB of 16.0 GB · swap 2.58 GB of 4.00 GB · pressure warning · compressor 2.94 GB
 
 Reclaimable  1.94 GB across 6 rules
   codex-runtimes           1.26 GB   rebuild
@@ -74,7 +74,7 @@ mk schedule --uninstall
 ## Menu-bar app (optional)
 
 `app/` is a thin SwiftUI menu-bar app. By default it runs `mk report --json`
-every 60 seconds and renders that result: disk, swap, memory pressure, the top
+every 60 seconds and renders that result: disk, RAM and swap, memory pressure, the top
 reclaimable rules, and orphaned startup items. Settings can switch to 5 minutes
 or manual refresh, change the menu-bar label, register a login item, and enable
 low-disk or critical-pressure notifications.
@@ -157,7 +157,7 @@ Required top-level fields:
 | `generatedAt` | string | ISO 8601 |
 | `home` | string | home directory the report was built against |
 | `disk` | object or null | `totalBytes`, `usedBytes`, `freeBytes`, `percent` (string) |
-| `memory` | object or null | `swap` (`totalBytes`, `usedBytes`, `freeBytes`), `pressureLevel` (1 normal, 2 warning, 4 critical; other values unknown), `pressureLabel`, `wiredBytes`, `compressorBytes`, `freeBytes` |
+| `memory` | object or null | `totalBytes` (physical RAM), `usedBytes` (app + wired + compressor, or null when the counters are absent), `appBytes` (anonymous minus purgeable), `cachedBytes` (file-backed), `swap` (`totalBytes`, `usedBytes`, `freeBytes`), `pressureLevel` (1 normal, 2 warning, 4 critical; other values unknown), `pressureLabel`, `wiredBytes`, `compressorBytes`, `freeBytes` |
 | `rows` | array | every rule, opt-in included |
 | `optInRows` | array | subset of `rows` with `optIn: true` |
 | `sweepableBytes` | number | non-opt-in rules that are not running |
