@@ -120,17 +120,36 @@ The only permanent loss is what the rule says: rebuildable caches, and — when 
 
 ## Rules
 
+Defaults use home-relative, standard cache paths, so one registry works across
+Macs: a missing tool or cache simply measures zero. Use
+`MK_RULES=/path/to/rules.json` to replace the registry for a machine with
+unusual paths or extra tools.
+
 | Rule | Default | What it removes |
 |---|---|---|
 | `npm-cache` | on | `~/.npm/_cacache` via `npm cache clean --force` |
 | `npx-cache` | on | `~/.npm/_npx` |
-| `uv-cache` | on | `~/.cache/uv` via `uv cache clean` |
+| `uv-cache` | on | `~/.cache/uv` or `~/Library/Caches/uv` via `uv cache clean` |
 | `pip-cache` | on | `~/Library/Caches/pip` via `pip cache purge` |
 | `pnpm-store` | on | prunes `~/Library/pnpm/store` |
-| `playwright-browsers` | on | `~/Library/Caches/ms-playwright` |
-| `codex-runtimes` | on | `~/.cache/codex-runtimes` |
-| `xcode-derived-data` | on | `~/Library/Developer/Xcode/DerivedData` |
+| `yarn-cache` | on | Yarn 1 and Berry caches |
+| `bun-cache` | on | `~/.bun/install/cache` |
+| `deno-cache` | on | Deno module cache |
+| `go-cache` | on | Go build cache and module cache (`go clean -modcache`) |
+| `cargo-cache` | on | Cargo registry and git caches |
+| `gradle-cache` | on | Gradle caches and wrapper distributions |
+| `maven-cache` | on | `~/.m2/repository` |
+| `swiftpm-cache` | on | `~/Library/Caches/org.swift.swiftpm` |
+| `cocoapods-cache` | on | `~/Library/Caches/CocoaPods` |
+| `playwright-browsers` | on | `~/Library/Caches/ms-playwright` or `~/.cache/ms-playwright` |
+| `puppeteer-browsers` | on | Puppeteer browser downloads |
+| `cypress-cache` | on | Cypress binary cache |
+| `electron-cache` | on | Electron and electron-builder downloads |
+| `xcode-derived-data` | on | `~/Library/Developer/Xcode/DerivedData` (app must be closed) |
 | `brew-cleanup` | on | old Homebrew versions and downloads |
+| `vscode-cache` | on | VS Code cache directories (app must be closed) |
+| `cursor-cache` | on | Cursor cache directories (app must be closed) |
+| `codex-runtimes` | on | `~/.cache/codex-runtimes` |
 | `spotify-cache` | on | Spotify cache (app must be closed) |
 | `brave-cache` | on | Brave caches (app must be closed) |
 | `chrome-cache` | on | Chrome cache (app must be closed) |

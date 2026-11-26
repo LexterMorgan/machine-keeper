@@ -19,7 +19,7 @@ is enough, no Xcode.
 ## Status
 
 - Engine complete and working: `report`, `clean`, `startup`, `rules`,
-  `schedule`. 17 rules; 48 Node tests passing.
+  `schedule`. 31 rules; 50 Node tests passing.
 - `mk report --json` and `mk clean --json` carry `schemaVersion: 1`;
   `test/report-json.test.mjs` pins the consumer contract. The pin is now the
   literal `1`, not just `JSON_SCHEMA_VERSION` echoing itself, and clean stdout
@@ -55,7 +55,7 @@ is enough, no Xcode.
 Verify before changing anything:
 
 ```bash
-node --test test/*.test.mjs                  # must stay 48/48 or grow
+node --test test/*.test.mjs                  # must stay 50/50 or grow
 node bin/mk.mjs report             # real, read-only output
 node bin/mk.mjs clean              # dry run, nothing deleted
 swift test --package-path app      # must stay 74/74 or grow
@@ -76,7 +76,7 @@ make app                           # hand-built bundle; open dist/MachineKeeper.
 | `src/startup.mjs` | launch agents/daemons, orphan detection, login items |
 | `src/schedule.mjs` | monthly launchd report (never cleans) |
 | `rules.default.json` | the allowlist; rules are data, not code |
-| `test/` | 48 Node tests; temp homes only, no real-home writes |
+| `test/` | 50 Node tests; temp homes only, no real-home writes |
 | `test/report-json.test.mjs` | contract test: pins the literal `schemaVersion` and the report/clean `--json` shapes |
 | `app/` | SwiftPM package: `MkBar` menu-bar executable, `MkBarCore` logic, Swift tests |
 | `app/README.md` | app architecture, state model, safety, and design narration |
@@ -151,8 +151,8 @@ make app                           # hand-built bundle; open dist/MachineKeeper.
   the registry changed since, the CLI rejects the request before deleting
   anything. That is a visible error and one Refresh away, not a partial clean.
 - Startup audit reports but cannot disable an agent — deliberate.
-- `clean` measures skipped rules too, which costs a `du` per rule. Fine at 17
-  rules; revisit if the registry grows into the dozens.
+- `clean` measures skipped rules too, which costs a `du` per rule. Fine at 31
+  rules (~6 s for a full report here); revisit if the registry grows further.
 - `mk startup --json` and `mk rules --json` have no `schemaVersion`; only
   report and clean are pinned.
 
