@@ -105,6 +105,12 @@ The header reports when numbers were read, not how they compare.
 The panel answers one question in a glance: should I clean now, and what will it
 free? Anything that does not serve that answer is absent.
 
+The Memory block leads with physical RAM used-of-total (Activity Monitor's
+app + wired + compressed), then a thin usage bar, swap, compressor, and the
+pressure dot. If macOS omits the anonymous/file-backed counters, the RAM line
+falls back to total only and the bar is not drawn; it never invents a used
+figure.
+
 - **Hierarchy:** header (name, freshness, refresh) → error → decision block
   (bytes ready, what running apps hold, opt-in bytes) → facts (disk, swap,
   pressure) → detail (largest safe rules, startup orphans) → actions → outcome →
@@ -145,7 +151,7 @@ formatting), `MkBar` (app and views), and `MkBarCoreTests`. Swift 6, macOS 15.
   Local build: not notarized, not published.
 - `make app-run` launches the bundle's binary from the terminal so `MK_BIN` is
   inherited; a Finder launch gets launchd's minimal environment.
-- `make app-test`, or `swift test --package-path app` (**73 tests**). Swift
+- `make app-test`, or `swift test --package-path app` (**74 tests**). Swift
   Testing, because this toolchain ships no XCTest. Core tests use the fixture
   report and a recording fake runner; no real `mk` or cache is touched.
 - When the JSON changes, the fixture and the root README's contract change

@@ -16,6 +16,10 @@
     },
     "pressureLevel": 2,
     "pressureLabel": "warning",
+    "totalBytes": 8589934592,
+    "usedBytes": 5998149632,
+    "appBytes": 1465188352,
+    "cachedBytes": 890224640,
     "wiredBytes": 1508081664,
     "compressorBytes": 3024879616,
     "freeBytes": 59850752

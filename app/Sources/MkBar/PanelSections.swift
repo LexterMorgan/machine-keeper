@@ -69,14 +69,43 @@ struct MemorySection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             if let memory {
-                HStack(alignment: .firstTextBaseline, spacing: PanelLayout.labelGap) {
-                    RowLabel("Memory")
+                if let total = memory.totalBytes, total > 0 {
+                    HStack(alignment: .firstTextBaseline, spacing: PanelLayout.labelGap) {
+                        RowLabel("Memory")
+                        Text(ramText(memory, total: total))
+                            .font(.subheadline)
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                        Spacer(minLength: 4)
+                        if let percent = ramPercent(memory, total: total) {
+                            Text(percent)
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if let fraction = ramFraction(memory, total: total) {
+                        UsageBar(fraction: fraction)
+                            .padding(.leading, PanelLayout.labelColumn + PanelLayout.labelGap)
+                    }
+
                     Text("Swap \(ByteFormat.string(memory.swap.usedBytes)) of \(ByteFormat.string(memory.swap.totalBytes))")
-                        .font(.subheadline)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                         .monospacedDigit()
                         .lineLimit(1)
-                        .minimumScaleFactor(0.85)
-                    Spacer(minLength: 0)
+                        .padding(.leading, PanelLayout.labelColumn + PanelLayout.labelGap)
+                } else {
+                    HStack(alignment: .firstTextBaseline, spacing: PanelLayout.labelGap) {
+                        RowLabel("Memory")
+                        Text("Swap \(ByteFormat.string(memory.swap.usedBytes)) of \(ByteFormat.string(memory.swap.totalBytes))")
+                            .font(.subheadline)
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                        Spacer(minLength: 0)
+                    }
                 }
 
                 HStack(alignment: .center, spacing: 6) {
@@ -106,6 +135,23 @@ struct MemorySection: View {
         .accessibilityValue(accessibilityValue)
     }
 
+    private func ramText(_ memory: MemoryInfo, total: Int64) -> String {
+        guard let used = memory.usedBytes else {
+            return "RAM \(ByteFormat.string(total)) total"
+        }
+        return "RAM \(ByteFormat.string(used)) of \(ByteFormat.string(total)) used"
+    }
+
+    private func ramFraction(_ memory: MemoryInfo, total: Int64) -> Double? {
+        guard total > 0, let used = memory.usedBytes else { return nil }
+        return min(max(Double(used) / Double(total), 0), 1)
+    }
+
+    private func ramPercent(_ memory: MemoryInfo, total: Int64) -> String? {
+        guard total > 0, let used = memory.usedBytes else { return nil }
+        return "\(Int((Double(used) / Double(total) * 100).rounded()))%"
+    }
+
     private func pressureText(_ memory: MemoryInfo) -> String {
         let label = memory.pressureLabel.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !label.isEmpty else { return "Unknown" }
@@ -114,7 +160,16 @@ struct MemorySection: View {
 
     private var accessibilityValue: String {
         guard let memory else { return "Not reported" }
-        return "Swap \(ByteFormat.string(memory.swap.usedBytes)) of "
+        let ram: String
+        if let total = memory.totalBytes, total > 0 {
+            ram = memory.usedBytes.map {
+                "RAM \(ByteFormat.string($0)) of \(ByteFormat.string(total)) used. "
+            } ?? "RAM \(ByteFormat.string(total)) total. "
+        } else {
+            ram = ""
+        }
+        return ram
+            + "Swap \(ByteFormat.string(memory.swap.usedBytes)) of "
             + "\(ByteFormat.string(memory.swap.totalBytes)). "
             + "Pressure \(pressureText(memory)). "
             + "Compressor \(ByteFormat.string(memory.compressorBytes))."

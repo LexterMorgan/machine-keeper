@@ -19,7 +19,7 @@ is enough, no Xcode.
 ## Status
 
 - Engine complete and working: `report`, `clean`, `startup`, `rules`,
-  `schedule`. 17 rules; 47 Node tests passing.
+  `schedule`. 17 rules; 48 Node tests passing.
 - `mk report --json` and `mk clean --json` carry `schemaVersion: 1`;
   `test/report-json.test.mjs` pins the consumer contract. The pin is now the
   literal `1`, not just `JSON_SCHEMA_VERSION` echoing itself, and clean stdout
@@ -37,9 +37,10 @@ is enough, no Xcode.
 - App surface: Settings (refresh, menu-bar label, launch at login via
   `SMAppService`, notifications), an All Rules window (safe/blocked/opt-in
   groups, startup orphans with Reveal), explicit per-rule opt-in cleaning behind
-  a confirmation, and a header quick-actions menu. Notifications are off by
+  a confirmation, and a header quick-actions menu. The panel reports physical
+  RAM used-of-total alongside swap and pressure. Notifications are off by
   default and request permission only from Settings.
-- 73 Swift tests passing (`swift test --package-path app`), written with Swift
+- 74 Swift tests passing (`swift test --package-path app`), written with Swift
   Testing because this machine's CommandLineTools has no XCTest.
 - CI covers the CLI matrix (macOS + Ubuntu, Node 20 and 22) and, separately,
   builds and tests the app on macOS.
@@ -53,10 +54,10 @@ is enough, no Xcode.
 Verify before changing anything:
 
 ```bash
-node --test test/                  # must stay 47/47 or grow
+node --test test/                  # must stay 48/48 or grow
 node bin/mk.mjs report             # real, read-only output
 node bin/mk.mjs clean              # dry run, nothing deleted
-swift test --package-path app      # must stay 73/73 or grow
+swift test --package-path app      # must stay 74/74 or grow
 make app                           # hand-built bundle; open dist/MachineKeeper.app
 ```
 
@@ -74,7 +75,7 @@ make app                           # hand-built bundle; open dist/MachineKeeper.
 | `src/startup.mjs` | launch agents/daemons, orphan detection, login items |
 | `src/schedule.mjs` | monthly launchd report (never cleans) |
 | `rules.default.json` | the allowlist; rules are data, not code |
-| `test/` | 47 Node tests; temp homes only, no real-home writes |
+| `test/` | 48 Node tests; temp homes only, no real-home writes |
 | `test/report-json.test.mjs` | contract test: pins the literal `schemaVersion` and the report/clean `--json` shapes |
 | `app/` | SwiftPM package: `MkBar` menu-bar executable, `MkBarCore` logic, Swift tests |
 | `app/README.md` | app architecture, state model, safety, and design narration |

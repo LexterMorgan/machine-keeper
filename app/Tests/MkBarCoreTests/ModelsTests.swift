@@ -30,6 +30,10 @@ struct ModelsTests {
         #expect(memory.wiredBytes == 1_508_081_664)
         #expect(memory.compressorBytes == 3_024_879_616)
         #expect(memory.freeBytes == 59_850_752)
+        #expect(memory.totalBytes == 8_589_934_592)
+        #expect(memory.usedBytes == 5_998_149_632)
+        #expect(memory.appBytes == 1_465_188_352)
+        #expect(memory.cachedBytes == 890_224_640)
 
         let npm = try #require(report.rows.first { $0.id == "npm-cache" })
         #expect(npm.title == "npm cache")
@@ -54,6 +58,29 @@ struct ModelsTests {
         #expect(startup.systemDaemons.filter(\.isOrphan).isEmpty)
         #expect(startup.loginItems == nil)
         #expect(startup.brewServices == nil)
+    }
+
+    @Test func memoryDecodesLegacyPayloadWithoutRAMCounters() throws {
+        let json = #"""
+        {
+          "generatedAt": "2026-01-01T00:00:00.000Z",
+          "rows": [],
+          "memory": {
+            "swap": { "totalBytes": 1, "usedBytes": 0, "freeBytes": 1 },
+            "pressureLevel": 1,
+            "pressureLabel": "normal",
+            "wiredBytes": 1,
+            "compressorBytes": 2,
+            "freeBytes": 3
+          }
+        }
+        """#
+        let report = try JSONDecoder().decode(Report.self, from: Data(json.utf8))
+        #expect(report.memory?.totalBytes == nil)
+        #expect(report.memory?.usedBytes == nil)
+        #expect(report.memory?.appBytes == nil)
+        #expect(report.memory?.cachedBytes == nil)
+        #expect(report.memory?.wiredBytes == 1)
     }
 
     @Test func reportDecodesMinimalPayloadWithDefaults() throws {

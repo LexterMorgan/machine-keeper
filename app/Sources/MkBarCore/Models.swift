@@ -106,13 +106,25 @@ public struct MemoryInfo: Sendable, Decodable, Equatable {
     public let compressorBytes: Int64
     public let freeBytes: Int64
 
+    /// Activity Monitor-style counters added after schema version 1. They are
+    /// optional so an older report still decodes; `usedBytes` is app + wired +
+    /// compressor, and is null when macOS did not report anonymous pages.
+    public let totalBytes: Int64?
+    public let usedBytes: Int64?
+    public let appBytes: Int64?
+    public let cachedBytes: Int64?
+
     public init(
         swap: SwapInfo,
         pressureLevel: Int,
         pressureLabel: String,
         wiredBytes: Int64,
         compressorBytes: Int64,
-        freeBytes: Int64
+        freeBytes: Int64,
+        totalBytes: Int64? = nil,
+        usedBytes: Int64? = nil,
+        appBytes: Int64? = nil,
+        cachedBytes: Int64? = nil
     ) {
         self.swap = swap
         self.pressureLevel = pressureLevel
@@ -120,6 +132,10 @@ public struct MemoryInfo: Sendable, Decodable, Equatable {
         self.wiredBytes = wiredBytes
         self.compressorBytes = compressorBytes
         self.freeBytes = freeBytes
+        self.totalBytes = totalBytes
+        self.usedBytes = usedBytes
+        self.appBytes = appBytes
+        self.cachedBytes = cachedBytes
     }
 }
 
