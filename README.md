@@ -118,7 +118,7 @@ This is a deletion tool, so the boring parts are the design:
 - **Running apps are skipped.** A Spotify or Brave cache is not deleted while the app holds it.
 - **Opt-in for anything with user value.** Uninstalled-app residue, model caches, Maven's local repository, and old installers are excluded unless `--include-opt-in` is passed. Downloads is scanned at the top level only.
 - **Protected paths, checked twice.** Registry validation rejects Documents, Desktop, Pictures, Projects, `.ssh`, `Library/Containers`, and similar. Immediately before a command or removal, cleanup resolves `realpath` for the actual home and target: a target that contains a protected directory, a symlinked parent into protected data, or a path that escapes home is refused. Unverifiable targets fail closed. This applies per installer file as well as recursive cache targets.
-- **Commands fail closed.** A command rule that exits non-zero aborts that rule; the tool does not fall back to `rm -rf`. The shipped commands were reviewed as target-scoped; Homebrew is now a plain cache deletion instead of `brew cleanup`, which reaches installed versions beyond its declared target.
+- **Commands fail closed.** A command rule that exits non-zero aborts that rule; the tool does not fall back to `rm -rf`. The shipped commands were reviewed as target-scoped; Homebrew is now a plain cache deletion instead of `brew cleanup`, which reaches installed versions beyond its declared target. Commands run with the current tool environment, so custom cache variables or config can redirect a tool outside its declared path; the default configurations were reviewed, but a custom environment is outside the allowlist guarantee.
 - **No `sudo`, ever.** Everything lives under your home directory. Anything needing root is out of scope.
 - **No network.** The tool never phones home, never uploads a report.
 
@@ -161,7 +161,7 @@ unusual paths or extra tools.
 | `chrome-cache` | on | Chrome cache (app must be closed) |
 | `codex-app-cache` | on | Codex cache (ChatGPT app must be closed) |
 | `steam-residue` | opt-in | Steam data when Steam is uninstalled |
-| `cursor-residue` | opt-in | Cursor data when Cursor is uninstalled and not running |
+| `cursor-residue` | opt-in | Cursor data; intended for an uninstalled Cursor, and only when Cursor is not running |
 | `huggingface-cache` | opt-in | downloaded models |
 | `stale-installers` | opt-in | `.dmg`/`.pkg`/`.zip` in Downloads older than 30 days |
 

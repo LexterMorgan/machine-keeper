@@ -94,7 +94,8 @@ The header reports when numbers were read, not how they compare.
 - Deleting takes a confirmation: Cancel is the default button, Clean is
   destructive and red, so a stray Return cannot delete.
 - The engine re-checks at clean time: a row that became opt-in or whose app
-  started is skipped, and the app never passes `--include-opt-in`.
+  started is skipped. Clean safe never passes `--include-opt-in`; only the
+  explicit per-rule All Rules path does.
 - Ids are one argv element (`--only a,b,c`) passed to `Process`: no shell, no
   quoting, no globbing. An empty list is rejected first, since an empty `--only`
   means no filter and would widen the set.

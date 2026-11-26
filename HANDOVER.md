@@ -19,7 +19,7 @@ is enough, no Xcode.
 ## Status
 
 - Engine complete and working: `report`, `clean`, `startup`, `rules`,
-  `schedule`. 31 rules; 70 Node tests passing.
+  `schedule`. 31 rules; 72 Node tests passing.
 - `mk report --json` and `mk clean --json` carry `schemaVersion: 1`;
   `test/report-json.test.mjs` pins the consumer contract. The pin is now the
   literal `1`, not just `JSON_SCHEMA_VERSION` echoing itself, and clean stdout
@@ -57,7 +57,7 @@ is enough, no Xcode.
 Verify before changing anything:
 
 ```bash
-node --test test/*.test.mjs                  # must stay 70/70 or grow
+node --test test/*.test.mjs                  # must stay 72/72 or grow
 node bin/mk.mjs report             # real, read-only output
 node bin/mk.mjs clean              # dry run, nothing deleted
 swift test --package-path app      # must stay 82/82 or grow
@@ -78,7 +78,7 @@ make app                           # hand-built bundle; open dist/MachineKeeper.
 | `src/startup.mjs` | launch agents/daemons, orphan detection, login items |
 | `src/schedule.mjs` | monthly launchd report (never cleans) |
 | `rules.default.json` | the allowlist; rules are data, not code |
-| `test/` | 70 Node tests; temp homes only, no real-home writes |
+| `test/` | 72 Node tests; temp homes only, no real-home writes |
 | `test/report-json.test.mjs` | contract test: pins the literal `schemaVersion` and the report/clean `--json` shapes |
 | `app/` | SwiftPM package: `MkBar` menu-bar executable, `MkBarCore` logic, Swift tests |
 | `app/README.md` | app architecture, state model, safety, and design narration |
@@ -154,6 +154,12 @@ make app                           # hand-built bundle; open dist/MachineKeeper.
   killed clean can stop half-done with no rollback, and a descendant that
   deliberately detaches into a new process group can escape. The app says a
   timed-out clean may be partial; re-run to finish.
+- **Command rules use the current tool environment.** `PIP_CACHE_DIR`,
+  `UV_CACHE_DIR`, `GOMODCACHE`, `.npmrc` cache settings, and similar can
+  redirect a TUI tool outside its declared paths. The shipped commands were
+  reviewed against their defaults; a hostile or unusual environment is outside
+  the allowlist guarantee. The CLI also exits 0 when one rule reports a clean
+  error (the JSON carries the error), so shell automation must inspect results.
 - **Final deletion guard has a TOCTOU window.** Registry validation is
   string-only; cleanup resolves `realpath` and refuses protected ancestors,
   symlinked-parent escapes, and unverifiable targets immediately before the
@@ -179,8 +185,8 @@ surface:
    `--json` boundary; do not move rules into Swift.
 2. **Release path.** Developer ID signing and notarization before anyone
    downloads a binary, or document `make app` as a build-locally artifact.
-3. **Remote and publish.** Create the GitHub remote, push, and publish the CLI
-   to npm once the install path is final.
+3. **Publish.** The GitHub remote exists; publish the CLI to npm once the
+   install path is final.
 
 ## Conventions
 
