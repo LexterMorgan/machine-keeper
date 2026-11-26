@@ -34,8 +34,20 @@ final class ReportStore {
     var safeRuleCount: Int { summary?.safeRuleIDs.count ?? 0 }
     var hasSafeRules: Bool { safeRuleCount > 0 }
 
+    /// Starts over with the current settings, so callers do not have to know
+    /// whether a loop was already running.
     func startPolling() {
-        guard pollingTask == nil else { return }
+        restartPolling()
+    }
+
+    /// Applies changes to the refresh interval and pause switch immediately.
+    func restartPolling() {
+        stopPolling()
+
+        let settings = AppSettings.shared
+        guard !settings.pauseRefresh, settings.refreshInterval.seconds != nil else {
+            return
+        }
 
         // The store is a singleton that lives as long as the app; capturing it
         // strongly is the honest lifetime here.
@@ -43,12 +55,22 @@ final class ReportStore {
             await refresh()
 
             while !Task.isCancelled {
+                let current = AppSettings.shared
+                guard !current.pauseRefresh, let seconds = current.refreshInterval.seconds else {
+                    break
+                }
+
                 do {
-                    try await Task.sleep(for: .seconds(60))
+                    try await Task.sleep(for: .seconds(seconds))
                 } catch {
                     break
                 }
                 guard !Task.isCancelled else { break }
+
+                let afterSleep = AppSettings.shared
+                guard !afterSleep.pauseRefresh, afterSleep.refreshInterval.seconds != nil else {
+                    break
+                }
                 await refresh()
             }
         }
@@ -98,19 +120,65 @@ final class ReportStore {
     func cleanSafe() async {
         guard !isCleaning else { return }
 
-        let ids = summary?.safeRuleIDs ?? []
+        // `summary` already excludes opt-in rows; repeat the exclusion here so
+        // this call can never widen if the summary changes. Opt-in rules only
+        // run through `cleanOptIn`.
+        let optInIDs = Set(report?.optInRows.map(\.id) ?? [])
+        let ids = (summary?.safeRuleIDs ?? []).filter { !optInIDs.contains($0) }
         guard !ids.isEmpty else {
             clearCleanOutcome()
             cleanError = "Nothing safe to clean right now."
             return
         }
 
+        await runClean(ids: ids, includeOptIn: false)
+    }
+
+    /// Cleans only opt-in rule ids that came from the current report. The
+    /// caller supplies the explicit selection; this method never infers one.
+    func cleanOptIn(ruleIDs: [String]) async {
+        guard !isCleaning else { return }
+
+        var seen = Set<String>()
+        let ids = ruleIDs.compactMap { raw -> String? in
+            let id = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !id.isEmpty, seen.insert(id).inserted else { return nil }
+            return id
+        }
+
+        guard !ids.isEmpty else {
+            clearCleanOutcome()
+            cleanError = "No opt-in rules were selected."
+            return
+        }
+
+        guard let report else {
+            clearCleanOutcome()
+            cleanError = "Refresh before cleaning opt-in rules."
+            return
+        }
+
+        // Defense in depth: only ids the engine itself marked as opt-in are
+        // allowed through, even if a view asks for something else.
+        let optInIDs = Set(report.optInRows.map(\.id))
+        guard ids.allSatisfy(optInIDs.contains) else {
+            clearCleanOutcome()
+            cleanError = "Only opt-in rules from the current report can be cleaned. Refresh and try again."
+            return
+        }
+
+        await runClean(ids: ids, includeOptIn: true)
+    }
+
+    /// The shared tail of a clean: one in-flight flag, the same outcome
+    /// rendering, and a post-clean read that polling cannot replace.
+    private func runClean(ids: [String], includeOptIn: Bool) async {
         isCleaning = true
         clearCleanOutcome()
         cleanError = nil
 
         do {
-            let result = try await service.clean(ruleIDs: ids)
+            let result = try await service.clean(ruleIDs: ids, includeOptIn: includeOptIn)
             applyCleanOutcome(result)
             dismissPreview()
         } catch {
@@ -146,6 +214,7 @@ final class ReportStore {
             errorMessage = nil
             setupHint = nil
             lastUpdated = Date()
+            NotificationManager.shared.evaluate(report: fresh, settings: AppSettings.shared)
         } catch {
             // Keep the last good report and summary on screen; only the status
             // line changes.

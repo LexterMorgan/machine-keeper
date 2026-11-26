@@ -5,6 +5,8 @@ import SwiftUI
 struct MenuBarPanel: View {
     let store: ReportStore
 
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
     @State private var confirmingClean = false
 
     var body: some View {
@@ -71,6 +73,8 @@ struct MenuBarPanel: View {
                 .accessibilityLabel("Refresh now")
                 .disabled(store.isBusy)
                 .keyboardShortcut("r", modifiers: .command)
+
+                headerMenu
             }
 
             Text(headerStatus)
@@ -84,6 +88,62 @@ struct MenuBarPanel: View {
             return "Updating…"
         }
         return UpdatedLabel.string(for: store.lastUpdated)
+    }
+
+    private var headerMenu: some View {
+        Menu {
+            Button("Refresh Now") {
+                Task { await store.refresh() }
+            }
+            .disabled(store.isBusy)
+
+            Button(store.cleanPreview == nil ? "Preview" : "Hide Preview") {
+                Task { await store.previewClean() }
+            }
+            .disabled(!store.hasSafeRules || store.isBusy)
+
+            Button("Clean Safe Caches…") {
+                // The menu only opens the inline confirmation; it never
+                // deletes on its own.
+                confirmingClean = true
+            }
+            .disabled(!store.hasSafeRules || store.isBusy)
+
+            Divider()
+
+            Button("All Rules…") {
+                openRulesWindow()
+            }
+
+            Button("Settings…") {
+                openSettingsWindow()
+            }
+
+            Divider()
+
+            Button("Quit") {
+                NSApplication.shared.terminate(nil)
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .help("Menu: refresh, preview, clean, all rules, settings, quit")
+        .accessibilityLabel("Menu")
+    }
+
+    private func openRulesWindow() {
+        openWindow(id: "rules")
+        NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+
+    private func openSettingsWindow() {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        openSettings()
     }
 
     // MARK: - Error
@@ -146,7 +206,8 @@ struct MenuBarPanel: View {
                 }
                 StartupLine(
                     orphanCount: summary.orphanCount,
-                    isChecked: report.startup != nil
+                    isChecked: report.startup != nil,
+                    onShowAllRules: openRulesWindow
                 )
             }
         } else if store.errorMessage == nil {
@@ -187,12 +248,12 @@ struct MenuBarPanel: View {
                 .controlSize(.regular)
                 .help(previewHelp)
                 .disabled(!store.hasSafeRules || store.isBusy)
-                .keyboardShortcut(.defaultAction)
 
                 Button("Clean safe caches…") {
                     confirmingClean = true
                 }
                 .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
                 .controlSize(.regular)
                 .help("Delete safe caches after a confirmation. Running apps are skipped and opt-in rules are never included.")
                 .disabled(!store.hasSafeRules || store.isBusy)
@@ -394,7 +455,9 @@ struct MenuBarPanel: View {
                         }
                     }
                 }
-                .frame(maxHeight: 150)
+                // A ScrollView has no intrinsic height. Without an explicit
+                // height it collapses and the dry-run rows never appear.
+                .frame(height: min(CGFloat(rows.count) * 34, 150))
                 .scrollIndicators(.visible)
             }
         }

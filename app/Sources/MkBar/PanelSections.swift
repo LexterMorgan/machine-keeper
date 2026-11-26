@@ -211,23 +211,36 @@ struct RuleList: View {
 struct StartupLine: View {
     let orphanCount: Int
     let isChecked: Bool
+    var onShowAllRules: (() -> Void)? = nil
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: symbolName)
-                .font(.caption)
-                .foregroundStyle(tint)
-                .accessibilityHidden(true)
-            Text(text)
-                .font(.caption)
-                .foregroundStyle(orphanCount > 0 ? Color.primary : Color.secondary)
-                .monospacedDigit()
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
+        HStack(alignment: .center, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: symbolName)
+                    .font(.caption)
+                    .foregroundStyle(tint)
+                    .accessibilityHidden(true)
+                Text(text)
+                    .font(.caption)
+                    .foregroundStyle(orphanCount > 0 ? Color.primary : Color.secondary)
+                    .monospacedDigit()
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .help(helpText)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(text)
+
+            Spacer(minLength: 4)
+
+            if let onShowAllRules {
+                Button("All rules…", action: onShowAllRules)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .font(.caption)
+                    .help("Open the All Rules window")
+                    .accessibilityLabel("Open All Rules")
+            }
         }
-        .help(helpText)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(text)
     }
 
     private var text: String {
