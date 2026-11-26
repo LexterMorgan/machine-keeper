@@ -36,12 +36,17 @@ process work and decoding run off-main, and the main actor only assigns.
 Settings control the automatic interval (60 s, 5 min, or manual), a pause
 switch, the menu-bar label, login-item registration, and notifications.
 
-`mk` is resolved per call: `MK_BIN`, then `PATH`, then install directories
-(Homebrew, npm global, Volta, Bun, Cargo, asdf, mise, pnpm). The child gets a
-rebuilt `PATH` with the resolved directory first, so an npm shim using
-`#!/usr/bin/env node` finds Node even with no inherited shell environment. If
-nothing resolves, the panel says how to install `mk` or set `MK_BIN` and offers
-Try Again; the menu bar shows a warning triangle.
+`mk` is resolved per call: `MK_BIN`, then the CLI inside the app bundle, then an
+external `mk` on `PATH` or in common install directories. The bundled CLI is run
+through Node discovered from `MK_NODE`, `PATH`, and the same install
+directories; Node 20+ is required. If the bundle exists but Node is missing,
+an installed external `mk` is still used; if neither works, the panel explains
+whether to install Node or set `MK_BIN` and offers Try Again. The menu bar shows
+a warning triangle.
+
+The child gets a rebuilt `PATH` with the resolved runtime directory first, so
+the bundled script can still find `du`, `pgrep`, and friends with no inherited
+shell environment.
 
 ## State model
 
@@ -146,12 +151,15 @@ figure.
 formatting), `MkBar` (app and views), and `MkBarCoreTests`. Swift 6, macOS 15.
 
 - `make app` builds release, assembles `dist/MachineKeeper.app` by hand
-  (`Contents/MacOS` plus `Info.plist`), stamps `package.json`'s version, and
-  ad-hoc signs. No Xcode project or `xcodebuild`; CommandLineTools is enough.
-  Local build: not notarized, not published.
-- `make app-run` launches the bundle's binary from the terminal so `MK_BIN` is
-  inherited; a Finder launch gets launchd's minimal environment.
-- `make app-test`, or `swift test --package-path app` (**74 tests**). Swift
+  (`Contents/MacOS`, `Info.plist`, and `Contents/Resources/cli`), stamps
+  `package.json`'s version, and ad-hoc signs. The copied CLI includes `bin/`,
+  `src/`, `rules.default.json`, `package.json`, and `LICENSE`, so a Finder
+  launch does not need `npm link`. No Xcode project or `xcodebuild`;
+  CommandLineTools is enough. Local build: not notarized, not published.
+- `make app-run` launches the bundle's binary from the terminal; `MK_NODE` and
+  `MK_BIN` are inherited for development overrides. A Finder launch uses the
+  bundled CLI and launchd's minimal environment.
+- `make app-test`, or `swift test --package-path app` (**80 tests**). Swift
   Testing, because this toolchain ships no XCTest. Core tests use the fixture
   report and a recording fake runner; no real `mk` or cache is touched.
 - When the JSON changes, the fixture and the root README's contract change

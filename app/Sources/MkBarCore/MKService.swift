@@ -86,7 +86,7 @@ public struct MKService: Sendable {
         let binary = try locator.locate()
         let command = Command(
             executable: binary.executable,
-            arguments: arguments,
+            arguments: binary.argumentsPrefix + arguments,
             environment: binary.environment,
             timeout: timeout
         )

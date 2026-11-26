@@ -32,23 +32,25 @@ is enough, no Xcode.
 - Menu-bar app in `app/`: `LSUIElement`, menu bar only, no Dock icon. It runs
   `mk report --json` every 60 s by default (Settings: 5 min, manual, or pause);
   preview is `mk clean --json`; Clean safe is
-  `mk clean --yes --only <safe ids> --json`. It contains no rules, paths, or
-  deletion code.
+  `mk clean --yes --only <safe ids> --json`. Its Swift code contains no rules,
+  paths, or deletion code; the bundle ships the engine's data and sources.
 - App surface: Settings (refresh, menu-bar label, launch at login via
   `SMAppService`, notifications), an All Rules window (safe/blocked/opt-in
   groups, startup orphans with Reveal), explicit per-rule opt-in cleaning behind
   a confirmation, and a header quick-actions menu. The panel reports physical
   RAM used-of-total alongside swap and pressure. Notifications are off by
   default and request permission only from Settings.
-- 74 Swift tests passing (`swift test --package-path app`), written with Swift
+- 80 Swift tests passing (`swift test --package-path app`), written with Swift
   Testing because this machine's CommandLineTools has no XCTest.
 - CI covers the CLI matrix (macOS + Ubuntu, Node 20 and 22) and, separately,
   builds and tests the app on macOS.
-- `make app` hand-assembles `dist/MachineKeeper.app` (`Contents/MacOS` plus
-  `Info.plist`) and ad-hoc signs it; `make app-run` and `make app-test` wrap it.
-- `MK_BIN` overrides `mk` discovery; otherwise the app checks `PATH` and common
-  Homebrew, npm, and node-version-manager directories. A missing `mk` shows the
-  error and setup hint instead of crashing.
+- `make app` hand-assembles `dist/MachineKeeper.app` (`Contents/MacOS`,
+  `Info.plist`, and `Contents/Resources/cli`) and ad-hoc signs it; the bundle
+  includes the CLI, rules, and engine sources, so no `npm link` is needed.
+- The app runs its bundled CLI through a discovered Node 20+ runtime. `MK_BIN`
+  overrides with an external `mk`; `MK_NODE` points at Node. If the bundled CLI
+  exists but Node is absent, an installed external `mk` is still used; a missing
+  runtime shows the error and setup hint instead of crashing.
 - Not notarized, not published to npm. Pushed to GitHub at
   `github.com/LexterMorgan/machine-keeper`.
 
@@ -58,7 +60,7 @@ Verify before changing anything:
 node --test test/*.test.mjs                  # must stay 50/50 or grow
 node bin/mk.mjs report             # real, read-only output
 node bin/mk.mjs clean              # dry run, nothing deleted
-swift test --package-path app      # must stay 74/74 or grow
+swift test --package-path app      # must stay 80/80 or grow
 make app                           # hand-built bundle; open dist/MachineKeeper.app
 ```
 
@@ -120,10 +122,10 @@ make app                           # hand-built bundle; open dist/MachineKeeper.
    `.app` bundle (`make app`, `Info.plist` with `LSUIElement`); ad-hoc signing
    is fine, notarization is out of scope. Tests use Swift Testing because
    CommandLineTools ships no XCTest.
-5. **Resolve `mk` per call, not at launch.** A GUI does not inherit a shell
-   `PATH`, so `MK_BIN` wins, then `PATH`, then known install directories.
-   Resolving inside each command means installing `mk` later works without a
-   relaunch.
+5. **Resolve the runtime per call, not at launch.** A GUI does not inherit a
+   shell `PATH`, so `MK_BIN` wins, then the bundled CLI through a discovered
+   Node, then an external `mk` in known install directories. Resolving inside
+   each command means installing Node or `mk` later works without a relaunch.
 6. **macOS-first.** Linux is welcome later; the rule model and metrics would
    need separate path/command implementations, not a rewrite.
 
@@ -132,7 +134,10 @@ make app                           # hand-built bundle; open dist/MachineKeeper.
 - **Not notarized.** `make app` ad-hoc signs; a downloadable build needs a
   Developer ID and notarization, or users build it locally.
 - **No npm publish.** `github.com/LexterMorgan/machine-keeper` is the home;
-  neither the CLI nor the app is on npm yet (`npm link` is the install path).
+  neither the CLI nor the app is on npm yet.
+- **Node is not bundled.** The app ships `mk` and the rules but needs Node 20+
+  on the machine; `MK_NODE` handles a nonstandard install. A true zero-setup
+  build would embed Node and add roughly 100 MB plus signing work.
 - **Launch at login is untested on this ad-hoc build.** The Settings toggle uses
   `SMAppService.mainApp`; macOS may require a signed bundle and Login Items
   approval, and the UI surfaces the error if registration fails.

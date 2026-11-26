@@ -259,6 +259,100 @@ struct LocatorTests {
         #expect(Set(entries).count == entries.count)
     }
 
+    @Test func bundledCLIUsesNodeAndPrefixesTheScript() throws {
+        let root = try makeScratchDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let cli = root.appendingPathComponent("cli", isDirectory: true)
+        let script = cli.appendingPathComponent("bin/mk.mjs").path
+
+        let locator = MKBinaries(
+            environment: ["MK_NODE": "/custom/node"],
+            home: home,
+            isExecutable: { $0 == "/custom/node" },
+            bundledCLIDirectory: cli,
+            isReadable: { $0 == script }
+        )
+
+        let binary = try locator.locate()
+        #expect(binary.executable.path == "/custom/node")
+        #expect(binary.argumentsPrefix == [script])
+    }
+
+    @Test func mkBinStillBeatsTheBundledCLI() throws {
+        let cli = URL(fileURLWithPath: "/tmp/cli", isDirectory: true)
+        let script = cli.appendingPathComponent("bin/mk.mjs").path
+        let locator = MKBinaries(
+            environment: ["MK_BIN": "/custom/mk", "MK_NODE": "/custom/node"],
+            home: home,
+            isExecutable: { $0 == "/custom/mk" || $0 == "/custom/node" },
+            bundledCLIDirectory: cli,
+            isReadable: { $0 == script }
+        )
+
+        let binary = try locator.locate()
+        #expect(binary.executable.path == "/custom/mk")
+        #expect(binary.argumentsPrefix.isEmpty)
+    }
+
+    @Test func bundledCLIFallsBackToInstalledMKWhenNodeIsMissing() throws {
+        let cli = URL(fileURLWithPath: "/tmp/cli", isDirectory: true)
+        let script = cli.appendingPathComponent("bin/mk.mjs").path
+        let locator = MKBinaries(
+            environment: ["PATH": "/first/bin"],
+            home: home,
+            isExecutable: { $0 == "/first/bin/mk" },
+            bundledCLIDirectory: cli,
+            isReadable: { $0 == script }
+        )
+
+        let binary = try locator.locate()
+        #expect(binary.executable.path == "/first/bin/mk")
+        #expect(binary.argumentsPrefix.isEmpty)
+    }
+
+    @Test func bundledCLIWithoutNodeOrInstalledMKExplainsTheNodeRequirement() {
+        let cli = URL(fileURLWithPath: "/tmp/cli", isDirectory: true)
+        let script = cli.appendingPathComponent("bin/mk.mjs").path
+        let locator = MKBinaries(
+            environment: [:],
+            home: home,
+            isExecutable: { _ in false },
+            bundledCLIDirectory: cli,
+            isReadable: { $0 == script }
+        )
+
+        do {
+            _ = try locator.locate()
+            Issue.record("Expected locate() to throw")
+        } catch let error as LocatorError {
+            #expect(error == .nodeNotFound)
+            #expect(error.setupHint.contains("Node.js"))
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
+    @Test func mkNodeMustBeExecutable() {
+        let cli = URL(fileURLWithPath: "/tmp/cli", isDirectory: true)
+        let script = cli.appendingPathComponent("bin/mk.mjs").path
+        let locator = MKBinaries(
+            environment: ["MK_NODE": "/blocked/node"],
+            home: home,
+            isExecutable: { _ in false },
+            bundledCLIDirectory: cli,
+            isReadable: { $0 == script }
+        )
+
+        do {
+            _ = try locator.locate()
+            Issue.record("Expected locate() to throw")
+        } catch let error as LocatorError {
+            #expect(error == .nodeNotExecutable(path: "/blocked/node"))
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
     @Test func notFoundThrows() {
         let locator = MKBinaries(
             environment: ["PATH": "/first/bin:/second/bin"],

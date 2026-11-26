@@ -213,6 +213,26 @@ struct MKServiceTests {
     }
 
 
+    @Test func bundledCLITellsTheRunnerToExecuteNodeWithTheScript() async throws {
+        let cli = URL(fileURLWithPath: "/tmp/cli", isDirectory: true)
+        let script = cli.appendingPathComponent("bin/mk.mjs").path
+        let locator = MKBinaries(
+            environment: ["MK_NODE": "/custom/node"],
+            home: URL(fileURLWithPath: "/Users/tester"),
+            isExecutable: { $0 == "/custom/node" },
+            bundledCLIDirectory: cli,
+            isReadable: { $0 == script }
+        )
+        let runner = RecordingRunner(commandOutput: try Self.successOutput(TestFixtures.reportData()))
+        let service = MKService(locator: locator, runner: runner)
+
+        _ = try await service.loadReport()
+
+        let command = try #require(await runner.recordedCommands().first)
+        #expect(command.executable.path == "/custom/node")
+        #expect(command.arguments == [script, "report", "--json"])
+    }
+
     @Test func cleanTimeoutExplainsPartialWork() async throws {
         let service = makeService(runner: TimeoutRunner(seconds: 180))
 

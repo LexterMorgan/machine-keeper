@@ -5,6 +5,7 @@ BUNDLE := dist/$(APP_NAME).app
 STAGED := dist/.$(APP_NAME).staged.app
 BINARY := $(STAGED)/Contents/MacOS/$(APP_NAME)
 RUN_BINARY := $(BUNDLE)/Contents/MacOS/$(APP_NAME)
+CLI_DIR := $(STAGED)/Contents/Resources/cli
 VERSION := $(shell node -p "require('./package.json').version" 2>/dev/null || echo 0.0.0)
 
 .PHONY: test app app-run app-test app-clean
@@ -20,9 +21,10 @@ app:
 	@test "$$(uname -s)" = Darwin || { echo "the menu-bar app builds only on macOS"; exit 1; }
 	swift build -c release --package-path app
 	rm -rf "$(STAGED)"
-	mkdir -p "$(STAGED)/Contents/MacOS" "$(STAGED)/Contents/Resources"
+	mkdir -p "$(STAGED)/Contents/MacOS" "$(STAGED)/Contents/Resources" "$(CLI_DIR)"
 	cp app/.build/release/mkbar "$(BINARY)"
 	cp app/Info.plist "$(STAGED)/Contents/Info.plist"
+	cp -R bin src rules.default.json package.json LICENSE "$(CLI_DIR)/"
 	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(VERSION)" "$(STAGED)/Contents/Info.plist"
 	plutil -lint "$(STAGED)/Contents/Info.plist"
 	@if command -v codesign >/dev/null 2>&1; then \

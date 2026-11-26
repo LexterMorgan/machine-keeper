@@ -86,8 +86,10 @@ explicit confirmation that spells out the user-files risk; clean safe never
 passes `--include-opt-in`. Every delete is still `mk clean ... --json`, whose
 result the app decodes. The app does not reimplement rules, paths, or deletion.
 
-Requires macOS 15 and a Swift 6 toolchain. CommandLineTools is enough — there is
-no Xcode project and `xcodebuild` is not used.
+Requires macOS 15, a Swift 6 toolchain, and Node.js 20 or newer at runtime.
+CommandLineTools is enough — there is no Xcode project and `xcodebuild` is not
+used. The app bundles its own copy of `mk`, the rules, and the engine sources,
+so `npm link` is no longer required.
 
 ```bash
 make app                  # release build + hand-assembled bundle in dist/
@@ -95,14 +97,17 @@ open dist/MachineKeeper.app
 
 make app-run              # same, launched from the terminal
 make app-test             # Swift tests
+MK_NODE=/path/to/node make app-run
 MK_BIN=/path/to/mk make app-run
 ```
 
 The bundle is `LSUIElement` (menu bar only, no Dock icon), ad-hoc signed, and
-not notarized; build it locally. `mk` must be installed (`npm link`) or `MK_BIN`
-must point at the executable. If `mk` cannot be found the app shows the error
-and the setup hint instead of crashing. See [app/README.md](app/README.md) for
-the architecture, state model, and design decisions.
+not notarized; build it locally. It runs its bundled CLI through a discovered
+Node 20+ runtime. `MK_NODE` points at a Node install the locator cannot find;
+`MK_BIN` still overrides the bundled CLI with an external `mk`. If neither Node
+nor an external `mk` is found, the app shows the error and setup hint instead
+of crashing. See [app/README.md](app/README.md) for the architecture, state
+model, and design decisions.
 
 ## Safety model
 

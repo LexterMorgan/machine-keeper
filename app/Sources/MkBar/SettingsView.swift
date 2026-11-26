@@ -220,7 +220,7 @@ struct SettingsView: View {
         Section("About") {
             LabeledContent("Version", value: version)
 
-            Text("mk must be on your PATH, or set MK_BIN to its location.")
+            Text("Machine Keeper includes mk and needs Node.js 20+. Set MK_NODE if Node is elsewhere; MK_BIN overrides with an external mk.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
