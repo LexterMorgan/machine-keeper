@@ -19,7 +19,7 @@ is enough, no Xcode.
 ## Status
 
 - Engine complete and working: `report`, `clean`, `startup`, `rules`,
-  `schedule`. 31 rules; 50 Node tests passing.
+  `schedule`. 31 rules; 70 Node tests passing.
 - `mk report --json` and `mk clean --json` carry `schemaVersion: 1`;
   `test/report-json.test.mjs` pins the consumer contract. The pin is now the
   literal `1`, not just `JSON_SCHEMA_VERSION` echoing itself, and clean stdout
@@ -40,7 +40,7 @@ is enough, no Xcode.
   a confirmation, and a header quick-actions menu. The panel reports physical
   RAM used-of-total alongside swap and pressure. Notifications are off by
   default and request permission only from Settings.
-- 80 Swift tests passing (`swift test --package-path app`), written with Swift
+- 82 Swift tests passing (`swift test --package-path app`), written with Swift
   Testing because this machine's CommandLineTools has no XCTest.
 - CI covers the CLI matrix (macOS + Ubuntu, Node 20 and 22) and, separately,
   builds and tests the app on macOS.
@@ -57,10 +57,10 @@ is enough, no Xcode.
 Verify before changing anything:
 
 ```bash
-node --test test/*.test.mjs                  # must stay 50/50 or grow
+node --test test/*.test.mjs                  # must stay 70/70 or grow
 node bin/mk.mjs report             # real, read-only output
 node bin/mk.mjs clean              # dry run, nothing deleted
-swift test --package-path app      # must stay 80/80 or grow
+swift test --package-path app      # must stay 82/82 or grow
 make app                           # hand-built bundle; open dist/MachineKeeper.app
 ```
 
@@ -78,7 +78,7 @@ make app                           # hand-built bundle; open dist/MachineKeeper.
 | `src/startup.mjs` | launch agents/daemons, orphan detection, login items |
 | `src/schedule.mjs` | monthly launchd report (never cleans) |
 | `rules.default.json` | the allowlist; rules are data, not code |
-| `test/` | 50 Node tests; temp homes only, no real-home writes |
+| `test/` | 70 Node tests; temp homes only, no real-home writes |
 | `test/report-json.test.mjs` | contract test: pins the literal `schemaVersion` and the report/clean `--json` shapes |
 | `app/` | SwiftPM package: `MkBar` menu-bar executable, `MkBarCore` logic, Swift tests |
 | `app/README.md` | app architecture, state model, safety, and design narration |
@@ -147,11 +147,19 @@ make app                           # hand-built bundle; open dist/MachineKeeper.
 - **Notch panel deferred.** The menu bar plus Settings/All Rules windows are the
   surfaces for now.
 - **A cancelled or timed-out clean is not transactional.** The runner signals
-  the child's whole process group on timeout (SIGTERM, then SIGKILL), but it
-  does not observe Swift task cancellation, and a killed clean can stop
-  half-done with no rollback. The app says so when a clean times out; re-run to
-  finish. A descendant that deliberately detaches into a new process group can
-  still escape.
+  the child's whole process group on timeout (SIGTERM, grace, SIGKILL), keeps
+  the leader unreaped until after the group signal so a helper that ignored
+  SIGTERM cannot survive or let the group ID be reused, then reaps it before
+  reporting the timeout. It still does not observe Swift task cancellation, a
+  killed clean can stop half-done with no rollback, and a descendant that
+  deliberately detaches into a new process group can escape. The app says a
+  timed-out clean may be partial; re-run to finish.
+- **Final deletion guard has a TOCTOU window.** Registry validation is
+  string-only; cleanup resolves `realpath` and refuses protected ancestors,
+  symlinked-parent escapes, and unverifiable targets immediately before the
+  command and again before each removal. Node's recursive `rm` has no
+  directory-fd/no-follow primitive, so a hostile swap between that check and
+  the delete is not prevented. No concurrent attacker is assumed.
 - **Stale safe ids fail closed.** The app sends the ids from its last report; if
   the registry changed since, the CLI rejects the request before deleting
   anything. That is a visible error and one Refresh away, not a partial clean.

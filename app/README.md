@@ -101,9 +101,12 @@ The header reports when numbers were read, not how they compare.
 - Stale ids fail closed: `selectRules` throws on unknown ids before `clean`
   starts; Refresh recovers.
 - A killed or timed-out clean is not transactional. The runner signals the
-  child's process group (SIGTERM, then SIGKILL after a grace period); a detached
-  child can escape, and half-finished work is not rolled back. The app says a
-  timed-out clean may be partial; re-run to finish.
+  child's process group (SIGTERM, grace, SIGKILL), does not reap the leader
+  until after the group signal so a surviving helper cannot escape and the
+  group ID cannot be reused, and only then reports the timeout. A child that
+  deliberately detaches into a new process group can still escape, and
+  half-finished work is not rolled back. The app says a timed-out clean may be
+  partial; re-run to finish.
 
 ## Design
 
@@ -159,7 +162,7 @@ formatting), `MkBar` (app and views), and `MkBarCoreTests`. Swift 6, macOS 15.
 - `make app-run` launches the bundle's binary from the terminal; `MK_NODE` and
   `MK_BIN` are inherited for development overrides. A Finder launch uses the
   bundled CLI and launchd's minimal environment.
-- `make app-test`, or `swift test --package-path app` (**80 tests**). Swift
+- `make app-test`, or `swift test --package-path app` (**82 tests**). Swift
   Testing, because this toolchain ships no XCTest. Core tests use the fixture
   report and a recording fake runner; no real `mk` or cache is touched.
 - When the JSON changes, the fixture and the root README's contract change

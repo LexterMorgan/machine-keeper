@@ -116,12 +116,13 @@ This is a deletion tool, so the boring parts are the design:
 - **Allowlist, not discovery.** Only home-relative paths named in `rules.default.json` are touched. There is no "find big files" mode.
 - **Dry run by default.** `--yes` is required to delete; without it `mk clean` only measures.
 - **Running apps are skipped.** A Spotify or Brave cache is not deleted while the app holds it.
-- **Opt-in for anything with user value.** Uninstalled-app residue, model caches, and old installers are excluded unless `--include-opt-in` is passed. Downloads is scanned at the top level only.
-- **Protected paths.** Rules cannot point at Documents, Desktop, Pictures, Projects, `.ssh`, `Library/Containers`, or similar. A rule that tries fails validation at startup.
+- **Opt-in for anything with user value.** Uninstalled-app residue, model caches, Maven's local repository, and old installers are excluded unless `--include-opt-in` is passed. Downloads is scanned at the top level only.
+- **Protected paths, checked twice.** Registry validation rejects Documents, Desktop, Pictures, Projects, `.ssh`, `Library/Containers`, and similar. Immediately before a command or removal, cleanup resolves `realpath` for the actual home and target: a target that contains a protected directory, a symlinked parent into protected data, or a path that escapes home is refused. Unverifiable targets fail closed. This applies per installer file as well as recursive cache targets.
+- **Commands fail closed.** A command rule that exits non-zero aborts that rule; the tool does not fall back to `rm -rf`. The shipped commands were reviewed as target-scoped; Homebrew is now a plain cache deletion instead of `brew cleanup`, which reaches installed versions beyond its declared target.
 - **No `sudo`, ever.** Everything lives under your home directory. Anything needing root is out of scope.
 - **No network.** The tool never phones home, never uploads a report.
 
-The only permanent loss is what the rule says: rebuildable caches, and — when you opt in — residue and installers.
+The only permanent loss is what the rule says: rebuildable caches, and — when you opt in — residue and installers. There is a small TOCTOU window between the final realpath check and the filesystem call or command. Node's recursive `rm` has no directory-fd/no-follow mode, so a hostile process that swaps a validated path for a symlink in that window is not defeated; the tool assumes no concurrent attacker with write access to the same home. Commands may also have effects within their tool's own model; only the reviewed commands above are shipped.
 
 ## Rules
 
@@ -143,7 +144,7 @@ unusual paths or extra tools.
 | `go-cache` | on | Go build cache and module cache (`go clean -modcache`) |
 | `cargo-cache` | on | Cargo registry and git caches |
 | `gradle-cache` | on | Gradle caches and wrapper distributions |
-| `maven-cache` | on | `~/.m2/repository` |
+| `maven-cache` | opt-in | `~/.m2/repository`; may hold unpublished locally installed artifacts Maven cannot re-download |
 | `swiftpm-cache` | on | `~/Library/Caches/org.swift.swiftpm` |
 | `cocoapods-cache` | on | `~/Library/Caches/CocoaPods` |
 | `playwright-browsers` | on | `~/Library/Caches/ms-playwright` or `~/.cache/ms-playwright` |
@@ -151,7 +152,7 @@ unusual paths or extra tools.
 | `cypress-cache` | on | Cypress binary cache |
 | `electron-cache` | on | Electron and electron-builder downloads |
 | `xcode-derived-data` | on | `~/Library/Developer/Xcode/DerivedData` (app must be closed) |
-| `brew-cleanup` | on | old Homebrew versions and downloads |
+| `brew-cleanup` | on | downloaded Homebrew cache only; installed versions untouched |
 | `vscode-cache` | on | VS Code cache directories (app must be closed) |
 | `cursor-cache` | on | Cursor cache directories (app must be closed) |
 | `codex-runtimes` | on | `~/.cache/codex-runtimes` |
@@ -160,7 +161,7 @@ unusual paths or extra tools.
 | `chrome-cache` | on | Chrome cache (app must be closed) |
 | `codex-app-cache` | on | Codex cache (ChatGPT app must be closed) |
 | `steam-residue` | opt-in | Steam data when Steam is uninstalled |
-| `cursor-residue` | opt-in | Cursor data when Cursor is uninstalled |
+| `cursor-residue` | opt-in | Cursor data when Cursor is uninstalled and not running |
 | `huggingface-cache` | opt-in | downloaded models |
 | `stale-installers` | opt-in | `.dmg`/`.pkg`/`.zip` in Downloads older than 30 days |
 
