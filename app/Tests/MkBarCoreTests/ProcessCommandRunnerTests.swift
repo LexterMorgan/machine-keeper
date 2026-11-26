@@ -265,6 +265,67 @@ struct ProcessCommandRunnerTests {
         #expect(gone, "grandchild sleep survived the process-group timeout")
     }
 
+    @Test func timeoutKillsHelperThatIgnoresTERMAfterLeaderExits() async throws {
+        let root = try makeScratchRoot()
+        let helperPIDFile = root.appendingPathComponent("helper.pid")
+        var helperPID: pid_t?
+        defer {
+            if helperPID == nil,
+               let text = try? String(contentsOf: helperPIDFile, encoding: .utf8) {
+                helperPID = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+            if let helperPID {
+                _ = kill(helperPID, SIGKILL)
+            }
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        let runner = ProcessCommandRunner(
+            temporaryRoot: root,
+            terminationGracePeriod: 0.3
+        )
+        // The leader exits on SIGTERM. The helper ignores SIGTERM and records
+        // its own pid, so the timeout must SIGKILL the surviving group member.
+        let script = """
+        trap 'exit 0' TERM
+        /bin/sh -c 'trap "" TERM; echo $$ > "\(helperPIDFile.path)"; while :; do /bin/sleep 1; done' &
+        wait
+        """
+
+        do {
+            _ = try await runner.run(
+                Command(
+                    executable: URL(fileURLWithPath: "/bin/sh"),
+                    arguments: ["-c", script],
+                    environment: ["PATH": "/usr/bin:/bin"],
+                    timeout: 0.5
+                )
+            )
+            Issue.record("Expected the runner to time out")
+        } catch let error as CommandError {
+            guard case .timedOut = error else {
+                Issue.record("Expected timedOut, got \(error)")
+                return
+            }
+        }
+
+        helperPID = try waitForPIDFile(helperPIDFile)
+        guard let helperPID else {
+            Issue.record("Helper never wrote its pid file")
+            return
+        }
+
+        var gone = false
+        for _ in 0..<100 {
+            if kill(helperPID, 0) == -1, errno == ESRCH {
+                gone = true
+                break
+            }
+            usleep(50_000)
+        }
+        #expect(gone, "helper survived the timeout after its leader exited")
+    }
+
     @Test func timedOutChildIsNotLeftAsAZombie() async throws {
         let root = try makeScratchRoot()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -358,6 +419,22 @@ struct ProcessCommandRunnerTests {
         #expect(stdout == ["first\n", "second\n"])
         #expect(entries(in: root).isEmpty)
     }
+}
+
+private func waitForPIDFile(_ file: URL, timeout: TimeInterval = 2) throws -> pid_t {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+        if let text = try? String(contentsOf: file, encoding: .utf8),
+           let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            return pid
+        }
+        usleep(20_000)
+    }
+    throw NSError(
+        domain: "ProcessCommandRunnerTests",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "helper pid file was not written"]
+    )
 }
 
 private func makeScratchRoot() throws -> URL {

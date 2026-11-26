@@ -196,19 +196,38 @@ public struct ProcessCommandRunner: CommandRunning {
         // The child is the group leader, so a negative pid signals every helper
         // it started. SIGTERM first, a short grace, then SIGKILL.
         _ = kill(-pid, SIGTERM)
+
+        // Do not reap the leader during the grace period. A zombie leader keeps
+        // its pid reserved, which keeps the process-group ID from being reused
+        // until the group has been signalled. If the group disappears early
+        // (leader and helpers both exited), stop waiting.
         let graceDeadline = Date().addingTimeInterval(terminationGracePeriod)
         while Date() < graceDeadline {
-            let result = waitpid(pid, &status, WNOHANG)
-            if result == pid {
-                return (true, status)
-            }
-            if result < 0 {
+            if !groupExists(pid) {
                 break
             }
             Thread.sleep(forTimeInterval: 0.02)
         }
 
+        // Signal the group before reaping the leader. A leader that exited on
+        // SIGTERM is a zombie here, not a reused pid, so this cannot hit an
+        // unrelated process group. SIGKILL also terminates helpers that
+        // ignored the earlier SIGTERM.
         _ = kill(-pid, SIGKILL)
+
+        // Wait for the group to disappear before reaping the leader. The
+        // leader's zombie keeps the group identifier reserved while helpers
+        // finish; do not send any further signals after waitpid.
+        let settleDeadline = Date().addingTimeInterval(
+            min(1.0, max(0.2, terminationGracePeriod))
+        )
+        while Date() < settleDeadline {
+            if !groupExists(pid) {
+                break
+            }
+            Thread.sleep(forTimeInterval: 0.02)
+        }
+
         let reaped = waitpid(pid, &status, 0)
         if reaped < 0 {
             throw CommandError.launchFailed(
@@ -216,6 +235,18 @@ public struct ProcessCommandRunner: CommandRunning {
             )
         }
         return (true, status)
+    }
+
+    /// `kill(-pgid, 0)` is a liveness probe, not a destructive signal. While
+    /// the leader is still unreaped, the group ID cannot be reused.
+    private func groupExists(_ pgid: pid_t) -> Bool {
+        if kill(-pgid, 0) == 0 {
+            return true
+        }
+        // On macOS an empty group whose only member is an unreaped zombie
+        // leader reports EPERM, not ESRCH. The leader is still owned by us and
+        // unreaped, so the group ID cannot have been reused; treat both as gone.
+        return errno != ESRCH && errno != EPERM
     }
 
     /// `waitpid` status follows the shell convention: 128 + signal for a

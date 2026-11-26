@@ -53,3 +53,34 @@ test("common non-App-specific toolchains are in the defaults", () => {
     ["go-cache"]
   );
 });
+
+test("shipped user-files rules are opt-in and app-guarded where needed", () => {
+  const { rules } = loadRules({ file: DEFAULT_RULES });
+  const maven = rules.find((rule) => rule.id === "maven-cache");
+  const cursorResidue = rules.find((rule) => rule.id === "cursor-residue");
+
+  assert.equal(maven.risk, "user-files");
+  assert.equal(maven.optIn, true);
+  assert.match(maven.reclaim, /unpublished|locally installed/);
+  assert.equal(cursorResidue.optIn, true);
+  assert.equal(cursorResidue.app, "Cursor");
+
+  assert.equal(selectRules(rules, { only: ["maven-cache"] }).length, 0);
+  assert.equal(
+    selectRules(rules, { only: ["maven-cache"], includeOptIn: true }).length,
+    1
+  );
+});
+
+test("command rules are limited to commands reviewed as target-scoped", () => {
+  const { rules } = loadRules({ file: DEFAULT_RULES });
+  const commands = rules
+    .filter((rule) => rule.kind === "command")
+    .map((rule) => rule.id)
+    .sort();
+
+  assert.deepEqual(commands, ["go-cache", "npm-cache", "pip-cache", "pnpm-store", "uv-cache"]);
+  const brew = rules.find((rule) => rule.id === "brew-cleanup");
+  assert.equal(brew.kind, "delete");
+  assert.equal(brew.command, undefined);
+});

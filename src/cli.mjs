@@ -68,6 +68,14 @@ export async function buildFullReport({
   return report;
 }
 
+function parseOnlyValue(value, flag) {
+  const ids = value.split(",").map((id) => id.trim()).filter(Boolean);
+  if (ids.length === 0) {
+    throw new Error(`${flag} needs at least one rule id`);
+  }
+  return ids;
+}
+
 export function parseArgs(argv) {
   const options = {
     command: "report",
@@ -97,15 +105,13 @@ export function parseArgs(argv) {
       options.help = true;
     } else if (arg === "--only") {
       const value = argv[index + 1];
-      if (!value) {
-        throw new Error("--only needs a comma-separated rule list");
+      if (!value || value.startsWith("-")) {
+        throw new Error("--only needs at least one rule id");
       }
-      options.only.push(...value.split(",").map((id) => id.trim()).filter(Boolean));
+      options.only.push(...parseOnlyValue(value, "--only"));
       index += 1;
     } else if (arg.startsWith("--only=")) {
-      options.only.push(
-        ...arg.slice("--only=".length).split(",").map((id) => id.trim()).filter(Boolean)
-      );
+      options.only.push(...parseOnlyValue(arg.slice("--only=".length), "--only="));
     } else if (arg.startsWith("-")) {
       throw new Error(`unknown flag: ${arg}`);
     } else {

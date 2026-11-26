@@ -1,7 +1,14 @@
 import { rm } from "node:fs/promises";
+import { run as defaultRun } from "./exec.mjs";
+import { assertDeletable } from "./guard.mjs";
 import { findInstallers } from "./installers.mjs";
 import { JSON_SCHEMA_VERSION } from "./schema.mjs";
-import { isAppRunning, measureBytes, ruleTargets } from "./targets.mjs";
+import {
+  isAppRunning,
+  measureBytes,
+  pathExists,
+  ruleTargets,
+} from "./targets.mjs";
 
 const REMOVE_OPTIONS = { recursive: true, force: true, maxRetries: 2 };
 
@@ -26,7 +33,7 @@ export async function clean({
   rules,
   dryRun = true,
   includeOptIn = false,
-  runCmd,
+  runCmd = defaultRun,
   now = () => new Date(),
   appRunning = isAppRunning,
   remove = (target, options) => rm(target, options),
@@ -65,8 +72,19 @@ export async function clean({
       }
 
       if (isInstallers) {
+        // Each installer is a separate file; validate every one before any
+        // removal so a redirected directory cannot delete a partial set.
+        for (const file of files) {
+          await assertDeletable(home, file.absolute);
+        }
         let removed = 0;
         for (const file of files) {
+          // Re-check immediately before each file removal; a directory can be
+          // swapped for a symlink after the batch validation above.
+          if (!(await pathExists(file.absolute))) {
+            continue;
+          }
+          await assertDeletable(home, file.absolute);
           await remove(file.absolute, { force: true });
           removed += file.bytes;
         }
@@ -78,11 +96,31 @@ export async function clean({
         continue;
       }
 
+      // Validate before a tool-aware command can touch anything, then again
+      // just before each recursive removal. The second check narrows, but does
+      // not eliminate, the validation/deletion race documented in the README.
+      for (const target of targets) {
+        await assertDeletable(home, target.absolute);
+      }
+
       if (rule.command) {
-        // Tool-aware cleanup first (npm, uv, brew), then remove leftovers.
-        await runCmd(rule.command[0], rule.command.slice(1));
+        // Tool-aware cleanup first (npm, uv, go, …). A failed command must not
+        // fall through to rm: the tool may have left a cache in a state where
+        // recursive deletion is unsafe.
+        const commandResult = await runCmd(rule.command[0], rule.command.slice(1));
+        if (!commandResult?.ok) {
+          const code = commandResult?.code ?? "unknown";
+          const detail = (commandResult?.stderr ?? "").trim();
+          throw new Error(
+            `cleanup command failed (${code})${detail ? `: ${detail}` : ""}`
+          );
+        }
       }
       for (const target of targets) {
+        if (!(await pathExists(target.absolute))) {
+          continue;
+        }
+        await assertDeletable(home, target.absolute);
         await remove(target.absolute, REMOVE_OPTIONS);
       }
 

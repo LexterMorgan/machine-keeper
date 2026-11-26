@@ -46,6 +46,20 @@ struct SummaryTests {
         #expect(summary.safeRuleIDs == ["a-tie", "b-tie", "blocked-idle"])
     }
 
+    @Test func mavenStyleUserFilesRowIsNeverInCleanSafe() {
+        let report = Report(
+            generatedAt: "2026-01-01T00:00:00.000Z",
+            rows: [
+                makeRow(id: "maven-cache", bytes: 10_000, optIn: true),
+                makeRow(id: "npm-cache", bytes: 100),
+            ]
+        )
+
+        let summary = report.summary()
+        #expect(summary.safeRuleIDs == ["npm-cache"])
+        #expect(!summary.reclaimables.contains { $0.id == "maven-cache" })
+    }
+
     @Test func orphanCountSpansAllLaunchdCollections() {
         let startup = StartupInfo(
             userAgents: [
