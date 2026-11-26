@@ -247,6 +247,58 @@ struct MKServiceTests {
         }
     }
 
+    @Test func cleanDefaultOmitsIncludeOptIn() async throws {
+        let runner = RecordingRunner(commandOutput: Self.successOutput(TestFixtures.cleanJSON))
+        let service = makeService(runner: runner)
+
+        _ = try await service.clean(ruleIDs: ["npm-cache"])
+
+        let commands = await runner.recordedCommands()
+        let command = try #require(commands.first)
+        #expect(command.arguments == ["clean", "--yes", "--only", "npm-cache", "--json"])
+        #expect(!command.arguments.contains("--include-opt-in"))
+        #expect(command.arguments.last == "--json")
+    }
+
+    @Test func cleanWithIncludeOptInAddsExactlyOneFlag() async throws {
+        let runner = RecordingRunner(commandOutput: Self.successOutput(TestFixtures.cleanJSON))
+        let service = makeService(runner: runner)
+
+        let result = try await service.clean(
+            ruleIDs: [" npm-cache ", "", "huggingface-cache"],
+            includeOptIn: true
+        )
+
+        #expect(result.results.count == 4)
+        let commands = await runner.recordedCommands()
+        let command = try #require(commands.first)
+        #expect(command.arguments == [
+            "clean", "--yes", "--only", "npm-cache,huggingface-cache", "--include-opt-in", "--json",
+        ])
+        #expect(command.arguments.filter { $0 == "--include-opt-in" }.count == 1)
+        #expect(command.arguments.contains("--yes"))
+        #expect(command.arguments.contains("--json"))
+        #expect(command.arguments.last == "--json")
+        #expect(command.timeout == 180)
+    }
+
+    @Test func cleanWithIncludeOptInAndOnlyBlankRuleIDsThrowsAndRunsNothing() async throws {
+        let runner = RecordingRunner(commandOutput: Self.successOutput(TestFixtures.cleanJSON))
+        let service = makeService(runner: runner)
+
+        do {
+            _ = try await service.clean(ruleIDs: ["", "   ", "\n\t"], includeOptIn: true)
+            Issue.record("Expected clean to throw")
+        } catch let error as MKServiceError {
+            #expect(error == .noRules)
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+
+        let commands = await runner.recordedCommands()
+        #expect(commands.isEmpty)
+    }
+
     private func makeService(runner: any CommandRunning) -> MKService {
         let locator = MKBinaries(
             environment: ["MK_BIN": mkPath, "PATH": "/usr/bin:/bin"],

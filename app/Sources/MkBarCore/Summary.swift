@@ -49,14 +49,7 @@ public extension Report {
                 return lhs.id < rhs.id
             }
 
-        let orphanCount: Int
-        if let startup {
-            orphanCount = (startup.userAgents + startup.systemAgents + startup.systemDaemons)
-                .filter(\.isOrphan)
-                .count
-        } else {
-            orphanCount = 0
-        }
+        let orphanCount = startup?.orphans.count ?? 0
 
         return ReportSummary(
             disk: disk,

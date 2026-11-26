@@ -43,7 +43,15 @@ public struct MKService: Sendable {
         try await execute(arguments: ["clean", "--json"], timeout: 120)
     }
 
-    public func clean(ruleIDs: [String]) async throws -> CleanResult {
+    /// Cleans only the given report-derived rule ids.
+    ///
+    /// Opt-in rules are never selected implicitly: `includeOptIn` is `false`
+    /// by default, and when it is `true` the caller is asserting that the user
+    /// explicitly asked for those rules.
+    ///
+    /// The argv order is stable and asserted by tests:
+    /// `clean --yes --only <ids> [--include-opt-in] --json`.
+    public func clean(ruleIDs: [String], includeOptIn: Bool = false) async throws -> CleanResult {
         // The CLI treats an empty `--only` list as "no filter", so a list of
         // blank ids must be rejected here: joining them would select every
         // non-opt-in rule instead of none. Valid ids are kebab-case, so
@@ -54,11 +62,15 @@ public struct MKService: Sendable {
         guard !ids.isEmpty else {
             throw MKServiceError.noRules
         }
+
+        var arguments = ["clean", "--yes", "--only", ids.joined(separator: ",")]
+        if includeOptIn {
+            arguments.append("--include-opt-in")
+        }
+        arguments.append("--json")
+
         do {
-            return try await execute(
-                arguments: ["clean", "--yes", "--only", ids.joined(separator: ","), "--json"],
-                timeout: 180
-            )
+            return try await execute(arguments: arguments, timeout: 180)
         } catch let error as CommandError {
             if case .timedOut(let seconds) = error {
                 // A killed clean is not transactional. Say so instead of

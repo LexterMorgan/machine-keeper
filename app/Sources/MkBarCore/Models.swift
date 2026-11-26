@@ -177,6 +177,13 @@ public struct StartupInfo: Sendable, Decodable, Equatable {
         self.loginItems = loginItems
         self.brewServices = brewServices
     }
+
+    /// Every orphaned launchd entry, in report order: user agents, then
+    /// system agents, then system daemons. A derived view of the decoded
+    /// report; it does not change what the engine audits.
+    public var orphans: [StartupEntry] {
+        (userAgents + systemAgents + systemDaemons).filter(\.isOrphan)
+    }
 }
 
 public struct StartupEntry: Sendable, Decodable, Equatable {

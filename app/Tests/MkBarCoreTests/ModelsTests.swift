@@ -167,6 +167,82 @@ struct ModelsTests {
         #expect(startup.brewServices?.isEmpty == true)
     }
 
+    @Test func startupOrphansGroupAllThreeSectionsInReportOrder() {
+        let startup = StartupInfo(
+            userAgents: [
+                StartupEntry(
+                    label: "user-present",
+                    file: "/agents/user-present.plist",
+                    program: "/bin/present",
+                    status: "present"
+                ),
+                StartupEntry(
+                    label: "user-orphan",
+                    file: "/agents/user-orphan.plist",
+                    program: "/bin/gone",
+                    status: "missing"
+                ),
+            ],
+            systemAgents: [
+                StartupEntry(
+                    label: "agent-orphan",
+                    file: "/agents/agent-orphan.plist",
+                    program: nil,
+                    status: "missing"
+                ),
+                StartupEntry(
+                    label: "agent-unknown",
+                    file: "/agents/agent-unknown.plist",
+                    program: nil,
+                    status: "unknown"
+                ),
+            ],
+            systemDaemons: [
+                StartupEntry(
+                    label: "daemon-orphan",
+                    file: "/daemons/daemon-orphan.plist",
+                    program: "/bin/gone",
+                    status: "missing"
+                ),
+            ],
+            loginItems: nil,
+            brewServices: nil
+        )
+
+        #expect(startup.orphans.map(\.label) == ["user-orphan", "agent-orphan", "daemon-orphan"])
+        #expect(startup.orphans.map(\.file) == [
+            "/agents/user-orphan.plist",
+            "/agents/agent-orphan.plist",
+            "/daemons/daemon-orphan.plist",
+        ])
+        #expect(startup.orphans.allSatisfy { $0.isOrphan })
+    }
+
+    @Test func startupOrphansFromFixtureReport() throws {
+        let report = try JSONDecoder().decode(Report.self, from: TestFixtures.reportData())
+        let startup = try #require(report.startup)
+
+        #expect(startup.orphans.map(\.label) == ["com.lwouis.alt-tab-macos"])
+    }
+
+    @Test func emptyOrMissingStartupHasNoOrphans() throws {
+        let empty = StartupInfo(
+            userAgents: [],
+            systemAgents: [],
+            systemDaemons: [],
+            loginItems: nil,
+            brewServices: nil
+        )
+        #expect(empty.orphans.isEmpty)
+
+        let report = try JSONDecoder().decode(
+            Report.self,
+            from: Data(#"{"generatedAt":"2026-01-01T00:00:00.000Z","rows":[]}"#.utf8)
+        )
+        #expect(report.startup == nil)
+        #expect((report.startup?.orphans ?? []).isEmpty)
+    }
+
     @Test func reportDecodesInt64SizesExactly() throws {
         let json = """
         {
