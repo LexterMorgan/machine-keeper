@@ -14,14 +14,17 @@ public struct ExploreService: Sendable {
     public let resultLimit: Int
 
     private let scanObserver: (@Sendable (Int) -> Void)?
+    private let metadataReader: ExploreDirectoryMetadataReader
 
     public init(
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
-        resultLimit: Int = 500
+        resultLimit: Int = 500,
+        metadataReader: @escaping ExploreDirectoryMetadataReader = ExploreDirectoryMetadata.live
     ) {
         self.home = home
         self.resultLimit = max(1, resultLimit)
         self.scanObserver = nil
+        self.metadataReader = metadataReader
     }
 
     /// Test seam: the observer receives the number of matching files found so
@@ -29,15 +32,21 @@ public struct ExploreService: Sendable {
     internal init(
         home: URL,
         resultLimit: Int = 500,
+        metadataReader: @escaping ExploreDirectoryMetadataReader = ExploreDirectoryMetadata.live,
         scanObserver: @escaping @Sendable (Int) -> Void
     ) {
         self.home = home
         self.resultLimit = max(1, resultLimit)
         self.scanObserver = scanObserver
+        self.metadataReader = metadataReader
     }
 
     /// Resolves and validates a candidate root. Returns the canonical folder.
-    public static func validateRoot(_ root: URL, home: URL) throws -> URL {
+    public static func validateRoot(
+        _ root: URL,
+        home: URL,
+        metadataReader: @escaping ExploreDirectoryMetadataReader = ExploreDirectoryMetadata.live
+    ) throws -> URL {
         let canonicalHome = ExplorePath.canonical(home)
 
         let homeSnapshot: FileSnapshot
@@ -64,7 +73,11 @@ public struct ExploreService: Sendable {
             throw ExploreError.rootOutsideHome(canonicalRoot.path)
         }
 
-        try validateExcludedAncestors(root: canonicalRoot, home: canonicalHome)
+        try validateExcludedAncestors(
+            root: canonicalRoot,
+            home: canonicalHome,
+            metadataReader: metadataReader
+        )
 
         guard FileManager.default.isReadableFile(atPath: canonicalRoot.path) else {
             throw ExploreError.rootNotReadable(canonicalRoot.path)
@@ -76,32 +89,40 @@ public struct ExploreService: Sendable {
     /// A directly selected root is not special: it must obey the same hidden
     /// and package rules as every traversed directory, including its ancestors
     /// up to home. Metadata failure is a rejection, never a permissive guess.
-    private static func validateExcludedAncestors(root: URL, home: URL) throws {
+    private static func validateExcludedAncestors(
+        root: URL,
+        home: URL,
+        metadataReader: ExploreDirectoryMetadataReader
+    ) throws {
         var current = root
         while true {
             guard let snapshot = try? FileMetadata.lstat(current), snapshot.isDirectory else {
                 throw ExploreError.rootMetadataUnavailable(current.path)
             }
 
-            let values: URLResourceValues
+            let flags: ExploreDirectoryFlags
             do {
-                values = try current.resourceValues(forKeys: [.isHiddenKey, .isPackageKey])
+                flags = try metadataReader(current)
             } catch {
                 throw ExploreError.rootMetadataUnavailable(current.path)
             }
 
             let name = current.lastPathComponent
-            if name.hasPrefix(".") || values.isHidden == true {
+            switch ExploreDirectoryPolicy.exclusion(name: name, flags: flags) {
+            case .metadataUnavailable:
+                throw ExploreError.rootMetadataUnavailable(current.path)
+            case .hidden:
                 if current.path == root.path {
                     throw ExploreError.rootHidden(current.path)
                 }
                 throw ExploreError.rootInHidden(current.path)
-            }
-            if ExplorePackage.hasPackageComponent(name) || values.isPackage == true {
+            case .package:
                 if current.path == root.path {
                     throw ExploreError.rootPackage(current.path)
                 }
                 throw ExploreError.rootInPackage(current.path)
+            case nil:
+                break
             }
 
             if current.path == home.path {
@@ -142,7 +163,11 @@ public struct ExploreService: Sendable {
         policy: ProtectionPolicy
     ) throws -> ExploreScanResult {
         let canonicalHome = ExplorePath.canonical(home)
-        let canonicalRoot = try Self.validateRoot(root, home: canonicalHome)
+        let canonicalRoot = try Self.validateRoot(
+            root,
+            home: canonicalHome,
+            metadataReader: metadataReader
+        )
         let limit = max(1, resultLimit)
 
         var files: [ExploreFile] = []
@@ -155,16 +180,22 @@ public struct ExploreService: Sendable {
             skipped.append(ExploreSkippedLocation(path: url.path, reason: reason))
         }
 
-        func isHidden(_ url: URL, name: String) -> Bool {
+        func fileIsHidden(_ url: URL, name: String) -> Bool {
             if name.hasPrefix(".") { return true }
             let values = try? url.resourceValues(forKeys: [.isHiddenKey])
             return values?.isHidden == true
         }
 
-        func isPackage(_ url: URL, name: String) -> Bool {
-            if ExplorePackage.hasPackageComponent(name) { return true }
-            let values = try? url.resourceValues(forKeys: [.isPackageKey])
-            return values?.isPackage == true
+        /// Directory metadata uses the same fail-closed decision as root and
+        /// Trash ancestor validation. Unknown flags skip the whole subtree.
+        func directoryExclusion(_ url: URL, name: String) -> ExploreDirectoryExclusion? {
+            let flags: ExploreDirectoryFlags
+            do {
+                flags = try metadataReader(url)
+            } catch {
+                return .metadataUnavailable
+            }
+            return ExploreDirectoryPolicy.exclusion(name: name, flags: flags)
         }
 
         // A manual FileManager walk is used instead of DirectoryEnumerator so
@@ -229,20 +260,27 @@ public struct ExploreService: Sendable {
                     continue
                 }
 
-                if isHidden(url, name: name) {
-                    skip(url, "Hidden")
-                    continue
-                }
-
                 if snapshot.isSymbolicLink {
                     skip(url, "Symbolic link")
                     continue
                 }
 
                 if snapshot.isDirectory {
-                    if isPackage(url, name: name) {
+                    switch directoryExclusion(url, name: name) {
+                    case .metadataUnavailable:
+                        skip(
+                            url,
+                            "Could not verify hidden/package metadata; folder was not entered."
+                        )
+                        continue
+                    case .hidden:
+                        skip(url, "Hidden")
+                        continue
+                    case .package:
                         skip(url, "App bundle or package")
                         continue
+                    case nil:
+                        break
                     }
                     guard FileManager.default.isReadableFile(atPath: url.path) else {
                         skip(url, "Folder is not readable")
@@ -252,6 +290,11 @@ public struct ExploreService: Sendable {
                         ? name
                         : "\(relativeDirectory)/\(name)"
                     walk(directory: url, relativeDirectory: childRelative)
+                    continue
+                }
+
+                if fileIsHidden(url, name: name) {
+                    skip(url, "Hidden")
                     continue
                 }
 

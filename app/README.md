@@ -127,8 +127,11 @@ rule builder and has no path into the cleanup registry.
   and root are checked. Containment is exact canonical filesystem ancestry, so
   `Work` and `work` stay distinct on a case-sensitive volume; only protected
   names are matched case-insensitively. A directly selected root or any of its
-  ancestors that is hidden or a package is rejected before enumeration.
-  Results show the full canonical path, size, and modification date.
+  ancestors that is hidden or a package is rejected before enumeration. A
+  directory passes metadata validation only when both Finder's hidden flag and
+  package status are explicitly false; an unknown value or failed lookup is
+  treated as unavailable and rejects/skips. Results show the full canonical
+  path, size, and modification date.
 - Filters combine with AND: filename substring, extension (case-insensitive,
   leading dot optional), minimum size, and modified-after date.
 - Scans run off-main, are capped at 500 matches, and are cancelled by changing
@@ -211,7 +214,7 @@ formatting), `MkBar` (app and views), and `MkBarCoreTests`. Swift 6, macOS 15.
 - `make app-run` launches the bundle's binary from the terminal; `MK_NODE` and
   `MK_BIN` are inherited for development overrides. A Finder launch uses the
   bundled CLI and launchd's minimal environment.
-- `make app-test`, or `swift test --package-path app` (**120 tests**). Swift
+- `make app-test`, or `swift test --package-path app` (**123 tests**). Swift
   Testing, because this toolchain ships no XCTest. Core tests use the fixture
   report and a recording fake runner; no real `mk` or cache is touched.
 - When the JSON changes, the fixture and the root README's contract change

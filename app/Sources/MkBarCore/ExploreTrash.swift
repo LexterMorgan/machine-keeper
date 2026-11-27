@@ -47,14 +47,17 @@ public struct ExploreTrashService: Sendable {
     public let policy: ProtectionPolicy
 
     private let trashOperation: TrashOperation
+    private let metadataReader: ExploreDirectoryMetadataReader
 
     public init(
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         policy: ProtectionPolicy,
+        metadataReader: @escaping ExploreDirectoryMetadataReader = ExploreDirectoryMetadata.live,
         trashOperation: @escaping TrashOperation = ExploreTrashService.nativeTrash
     ) {
         self.home = home
         self.policy = policy
+        self.metadataReader = metadataReader
         self.trashOperation = trashOperation
     }
 
@@ -229,21 +232,26 @@ public struct ExploreTrashService: Sendable {
                 return "Could not verify the folder \(current.path); the file was not moved."
             }
 
-            let values: URLResourceValues
+            let flags: ExploreDirectoryFlags
             do {
-                values = try current.resourceValues(forKeys: [.isHiddenKey, .isPackageKey])
+                flags = try metadataReader(current)
             } catch {
                 return "Could not verify whether \(current.path) is hidden or a package; "
                     + "the file was not moved."
             }
 
             let name = current.lastPathComponent
-            if name.hasPrefix(".") || values.isHidden == true {
+            switch ExploreDirectoryPolicy.exclusion(name: name, flags: flags) {
+            case .metadataUnavailable:
+                return "Could not verify whether \(current.path) is hidden or a package; "
+                    + "the file was not moved."
+            case .hidden:
                 return "The folder \(current.path) is hidden; the file was not moved to Trash."
-            }
-            if ExplorePackage.hasPackageComponent(name) || values.isPackage == true {
+            case .package:
                 return "The folder \(current.path) is an app bundle or package; "
                     + "the file was not moved to Trash."
+            case nil:
+                break
             }
 
             if current.path == home.path {
