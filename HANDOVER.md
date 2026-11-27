@@ -19,7 +19,7 @@ is enough, no Xcode.
 ## Status
 
 - Engine complete and working: `report`, `clean`, `startup`, `rules`,
-  `schedule`. 31 rules; 72 Node tests passing.
+  `schedule`. 31 rules; 83 Node tests passing.
 - `mk report --json` and `mk clean --json` carry `schemaVersion: 1`;
   `test/report-json.test.mjs` pins the consumer contract. The pin is now the
   literal `1`, not just `JSON_SCHEMA_VERSION` echoing itself, and clean stdout
@@ -32,15 +32,23 @@ is enough, no Xcode.
 - Menu-bar app in `app/`: `LSUIElement`, menu bar only, no Dock icon. It runs
   `mk report --json` every 60 s by default (Settings: 5 min, manual, or pause);
   preview is `mk clean --json`; Clean safe is
-  `mk clean --yes --only <safe ids> --json`. Its Swift code contains no rules,
-  paths, or deletion code; the bundle ships the engine's data and sources.
+  `mk clean --yes --only <safe ids> --json`. Its cleanup code contains no
+  rules, target paths, or deletion logic; the bundle ships the engine's data
+  and sources.
 - App surface: Settings (refresh, menu-bar label, launch at login via
   `SMAppService`, notifications), an All Rules window (safe/blocked/opt-in
   groups, startup orphans with Reveal), explicit per-rule opt-in cleaning behind
-  a confirmation, and a header quick-actions menu. The panel reports physical
-  RAM used-of-total alongside swap and pressure. Notifications are off by
-  default and request permission only from Settings.
-- 82 Swift tests passing (`swift test --package-path app`), written with Swift
+  a confirmation, a header quick-actions menu, and the separate **Explore**
+  window. The panel reports physical RAM used-of-total alongside swap and
+  pressure. Notifications are off by default and request permission only from
+  Settings.
+- Explore is a read/Trash surface, not a rule builder: home-contained folder
+  scan, combinable filters, 500-file cap with explicit truncation, skipped/
+  unreadable reporting, regular files only, protected locations inspectable but
+  Trash-disabled. It shares `policy.json` with the CLI guard, adds `~/Library`
+  as an Explore-only protected root, and never writes rules or feeds Clean Safe
+  or the scheduled report.
+- 117 Swift tests passing (`swift test --package-path app`), written with Swift
   Testing because this machine's CommandLineTools has no XCTest.
 - CI covers the CLI matrix (macOS + Ubuntu, Node 20 and 22) and, separately,
   builds and tests the app on macOS.
@@ -57,10 +65,10 @@ is enough, no Xcode.
 Verify before changing anything:
 
 ```bash
-node --test test/*.test.mjs                  # must stay 72/72 or grow
+node --test test/*.test.mjs                  # must stay 83/83 or grow
 node bin/mk.mjs report             # real, read-only output
 node bin/mk.mjs clean              # dry run, nothing deleted
-swift test --package-path app      # must stay 82/82 or grow
+swift test --package-path app      # must stay 117/117 or grow
 make app                           # hand-built bundle; open dist/MachineKeeper.app
 ```
 
@@ -77,12 +85,14 @@ make app                           # hand-built bundle; open dist/MachineKeeper.
 | `src/clean.mjs` | dry-run by default; app-quit guard; per-rule isolation |
 | `src/startup.mjs` | launch agents/daemons, orphan detection, login items |
 | `src/schedule.mjs` | monthly launchd report (never cleans) |
+| `policy.json` | shared never-touch policy for the CLI guard and Explore |
 | `rules.default.json` | the allowlist; rules are data, not code |
-| `test/` | 72 Node tests; temp homes only, no real-home writes |
+| `test/` | 83 Node tests; temp homes only, no real-home writes |
 | `test/report-json.test.mjs` | contract test: pins the literal `schemaVersion` and the report/clean `--json` shapes |
 | `app/` | SwiftPM package: `MkBar` menu-bar executable, `MkBarCore` logic, Swift tests |
 | `app/README.md` | app architecture, state model, safety, and design narration |
-| `app/Sources/MkBar/` | panel, Settings, All Rules, settings/notifications, menu-bar scenes |
+| `app/Sources/MkBar/` | panel, Settings, All Rules, Explore, settings/notifications, menu-bar scenes |
+| `app/Sources/MkBarCore/` | CLI bridge, report summary, process runner, Explore scan/Trash/policy |
 | `app/Info.plist` | bundle metadata: `LSUIElement`, macOS 15 minimum, version |
 | `Makefile` | `test`, `app` (hand-built bundle), `app-run`, `app-test`, `app-clean` |
 
@@ -95,28 +105,34 @@ make app                           # hand-built bundle; open dist/MachineKeeper.
 - No `sudo`, no system paths, no recursion into Downloads, no network.
 - The guard refuses `Documents`, `Desktop`, `Pictures`, `Projects`, `.ssh`,
   `Library/Containers`, `Library/Mobile Documents` even if a rule names them.
-- **The app is a face, not an engine.** Swift code contains no rule
-  definitions, target paths, or deletion logic. It reads `mk report --json`,
-  previews `mk clean --json`, and deletes only through
+- **The app is a face for cleanup, not an engine.** Swift cleanup code contains
+  no rule definitions, target paths, or deletion logic. It reads
+  `mk report --json`, previews `mk clean --json`, and deletes only through
   `mk clean --yes --only <ids> --json` with ids the report returned. Choosing
   safe rows is allowed; inventing ids or paths is not.
+- **Explore is separate and never becomes cleanup.** It scans a home-contained
+  folder and moves only selected regular files to native Trash. No Explore
+  result is written to rules, passed to `mk clean`, included in Clean Safe, or
+  used by the scheduled report. It shares the CLI's `neverTouch` policy through
+  `policy.json` and adds `~/Library` as Explore-only protection.
 - **Opt-in deletion is explicit.** `--include-opt-in` is sent only for a single
   opt-in rule the user selected in All Rules, after a confirmation whose default
   is Cancel. Clean safe filters opt-in ids and never sends the flag.
 
 ## Decisions already made
 
-1. **The CLI is the engine; any GUI is a face.** Implemented in `app/`: it
-   shells out to `mk report --json` and `mk clean --json` and never
-   reimplements rules, paths, or deletion.
+1. **The CLI is the cleanup engine; the GUI is a cleanup face.** Implemented
+   in `app/`: cleanup shells out to `mk report --json` and `mk clean --json`
+   and never reimplements rules, paths, or cleanup deletion. Explore is a
+   separate Trash-only surface, not a second cleanup engine.
 2. **The JSON boundary is versioned and additive.** `schemaVersion` is `1`
    (`src/schema.mjs`); bump it only for a removal or retype. Consumers ignore
    unknown keys. `test/report-json.test.mjs` and the README "JSON boundary"
    section move together with any shape change.
 3. **Menu-bar app first, notch panel later.** The `MenuBarExtra` panel (disk,
    swap, pressure dot, top three reclaimables, orphan count, Refresh, Preview
-   clean, Clean safe) is the useful 90%. A boringNotch-style overlay is a
-   separate, riskier project.
+   clean, Clean safe) plus Explore is the useful 90%. A boringNotch-style
+   overlay is a separate, riskier project.
 4. **No Xcode on this machine.** Only CommandLineTools, Swift 6.0.3, macOS SDK
    15.2, arm64, macOS 15 target. SwiftPM (`swift build`) plus a hand-written
    `.app` bundle (`make app`, `Info.plist` with `LSUIElement`); ad-hoc signing
@@ -128,6 +144,24 @@ make app                           # hand-built bundle; open dist/MachineKeeper.
    each command means installing Node or `mk` later works without a relaunch.
 6. **macOS-first.** Linux is welcome later; the rule model and metrics would
    need separate path/command implementations, not a rewrite.
+
+## Open cleanup audit findings (tracked separately from Explore)
+
+These are still open; Explore does not address them, and they are not
+duplicated as ordinary gaps below.
+
+1. **TOCTOU between cleanup validation and removal/command.** `clean` resolves
+   `realpath` immediately before acting, but Node's recursive `rm` has no
+   directory-fd/no-follow mode. A hostile concurrent path swap in the final
+   window is not prevented; the documented assumption is no concurrent attacker
+   with write access to the home. Explore has its own analogous final-check/
+   `trashItem` race, documented separately.
+2. **Command rules inherit the tool environment/config.** `PIP_CACHE_DIR`,
+   `UV_CACHE_DIR`, `GOMODCACHE`, `.npmrc` cache settings, and similar can
+   redirect an external tool outside the declared paths. The shipped commands
+   were reviewed against defaults, but a custom environment is outside the
+   cleanup allowlist guarantee. The CLI also exits 0 on a per-rule clean error;
+   the JSON carries it.
 
 ## Known gaps
 
@@ -144,8 +178,8 @@ make app                           # hand-built bundle; open dist/MachineKeeper.
 - **Notifications are permission-gated.** They are off by default, request
   permission only from Settings, and were not delivered in automated checks; a
   bare `swift run` no-ops because `UNUserNotificationCenter` needs an app bundle.
-- **Notch panel deferred.** The menu bar plus Settings/All Rules windows are the
-  surfaces for now.
+- **Notch panel deferred.** The menu bar plus Settings/All Rules/Explore
+  windows are the surfaces for now.
 - **A cancelled or timed-out clean is not transactional.** The runner signals
   the child's whole process group on timeout (SIGTERM, grace, SIGKILL), keeps
   the leader unreaped until after the group signal so a helper that ignored
@@ -154,18 +188,16 @@ make app                           # hand-built bundle; open dist/MachineKeeper.
   killed clean can stop half-done with no rollback, and a descendant that
   deliberately detaches into a new process group can escape. The app says a
   timed-out clean may be partial; re-run to finish.
-- **Command rules use the current tool environment.** `PIP_CACHE_DIR`,
-  `UV_CACHE_DIR`, `GOMODCACHE`, `.npmrc` cache settings, and similar can
-  redirect a TUI tool outside its declared paths. The shipped commands were
-  reviewed against their defaults; a hostile or unusual environment is outside
-  the allowlist guarantee. The CLI also exits 0 when one rule reports a clean
-  error (the JSON carries the error), so shell automation must inspect results.
-- **Final deletion guard has a TOCTOU window.** Registry validation is
-  string-only; cleanup resolves `realpath` and refuses protected ancestors,
-  symlinked-parent escapes, and unverifiable targets immediately before the
-  command and again before each removal. Node's recursive `rm` has no
-  directory-fd/no-follow primitive, so a hostile swap between that check and
-  the delete is not prevented. No concurrent attacker is assumed.
+- **Explore's final validation is not atomic with Trash.** It rechecks
+  canonical home/root/parent, file type, identity, size, and mtime immediately
+  before `FileManager.trashItem`, but `FileManager` has no atomic
+  "trash exactly this inode" operation. A path swapped in the tiny window is
+  not detected. It never permanently deletes.
+- **Explore is capped at 500 matching files.** The UI says the list is
+  incomplete and asks for narrower filters; it does not paginate.
+- **Explore's live menu-bar UI flow is verified separately from unit tests.**
+  Automated tests cover scan/filter/cancel/stale/selection/protected/trash
+  outcomes; interactive NSOpenPanel and window behavior require the live check.
 - **Stale safe ids fail closed.** The app sends the ids from its last report; if
   the registry changed since, the CLI rejects the request before deleting
   anything. That is a visible error and one Refresh away, not a partial clean.

@@ -1,13 +1,16 @@
 # Menu-bar app
 
-A SwiftUI `MenuBarExtra` that shows what `mk` already knows, plus a Settings
-window and an **All Rules** window. `mk` is the engine; the app is a face, and
-that boundary is the design.
+A SwiftUI `MenuBarExtra` that shows what `mk` already knows, plus Settings,
+**All Rules**, and a separate **Explore** window. `mk` is the cleanup engine;
+the app is a face, and that boundary is the design.
 
-**The one rule:** nothing under `app/` defines a cache, a target path, or a
-deletion. The app runs `mk`, decodes the versioned JSON in the root README's
-[JSON boundary](../README.md#json-boundary), and renders it. A rule or path
-added here breaks the model; it belongs in the engine.
+**The one rule:** nothing under `app/` defines a cleanup cache, rule, target
+path, or cleanup deletion. The app runs `mk`, decodes the versioned JSON in the
+root README's [JSON boundary](../README.md#json-boundary), and renders it.
+Explore is deliberately different: it searches files and moves individually
+selected regular files to the native Trash. It never writes rules, never feeds
+Clean Safe or scheduled cleanup, and shares the CLI's never-touch policy rather
+than defining a second cleanup registry.
 
 It runs `mk report --json` on launch, on panel open if the last read is over
 30 s old, and every 60 s; `mk clean --json` for Preview; and
@@ -27,6 +30,12 @@ MenuBarExtra (.window)
         ProcessCommandRunner      Process, no shell, off-main
           mk report --json / mk clean ...
             Report, CleanResult -> Report.summary(top: 3) -> panel sections
+
+Explore window
+  ExploreModel                  @MainActor @Observable, scan generations
+    ExploreService              off-main, cancellable, bounded scan
+    ExploreTrashService         native Trash + per-file revalidation
+      ProtectionPolicy          policy.json shared with the CLI guard
 ```
 
 `ReportStore` owns the last report, its summary, and preview/clean state. Views
@@ -109,6 +118,40 @@ The header reports when numbers were read, not how they compare.
   half-finished work is not rolled back. The app says a timed-out clean may be
   partial; re-run to finish.
 
+## Explore
+
+Explore answers a different question: "what is in this folder?" It is not a
+rule builder and has no path into the cleanup registry.
+
+- The root must be a folder inside the current user's home; the canonical home
+  and root are checked. Results show the full canonical path, size, and
+  modification date.
+- Filters combine with AND: filename substring, extension (case-insensitive,
+  leading dot optional), minimum size, and modified-after date.
+- Scans run off-main, are capped at 500 matches, and are cancelled by changing
+  folder/filter state. A generation counter discards stale results. Skipped
+  and unreadable locations are listed; `isTruncated` is proven by finding one
+  extra match beyond the cap.
+- Traversal returns regular files only. It skips symlinks (including symlinked
+  folders), hidden entries, `.app` bundles, and packages; unreadable folders
+  are reported rather than silently omitted.
+- The never-touch list from `policy.json` is shared with the CLI guard.
+  Explore additionally treats `~/Library` as protected. Protected results stay
+  visible with a reason, but selection cannot lead to a Trash action. Root and
+  file protection are both checked in the code that performs the move.
+- Selection starts empty and clears on folder/filter changes. The confirmation
+  sheet lists the exact paths, count, and total size. The only operation is
+  `FileManager.trashItem`; there is no permanent-delete fallback. Outcomes are
+  per file, and only `.trashed` rows leave the result/selection set. The copy
+  says "moved to Trash", never "freed".
+- Immediately before each move, canonical home/root/parent are re-resolved and
+  the file is `lstat`ed as a regular, non-symlink file with matching
+  device/inode, size, and mtime. Changed, moved, hidden, package, protected, or
+  unverifiable files are skipped and reported.
+- Remaining race: the final validation and `trashItem` are not atomic. A file
+  swapped in that window cannot be detected by `FileManager`; this is
+  documented here and in the Trash service.
+
 ## Design
 
 The panel answers one question in a glance: should I clean now, and what will it
@@ -155,15 +198,16 @@ figure.
 formatting), `MkBar` (app and views), and `MkBarCoreTests`. Swift 6, macOS 15.
 
 - `make app` builds release, assembles `dist/MachineKeeper.app` by hand
-  (`Contents/MacOS`, `Info.plist`, and `Contents/Resources/cli`), stamps
-  `package.json`'s version, and ad-hoc signs. The copied CLI includes `bin/`,
-  `src/`, `rules.default.json`, `package.json`, and `LICENSE`, so a Finder
-  launch does not need `npm link`. No Xcode project or `xcodebuild`;
-  CommandLineTools is enough. Local build: not notarized, not published.
+  (`Contents/MacOS`, `Info.plist`, `Contents/Resources/policy.json`, and
+  `Contents/Resources/cli`), stamps `package.json`'s version, and ad-hoc signs.
+  The copied CLI includes `bin/`, `src/`, `rules.default.json`, `policy.json`,
+  `package.json`, and `LICENSE`, so a Finder launch does not need `npm link`.
+  No Xcode project or `xcodebuild`; CommandLineTools is enough. Local build:
+  not notarized, not published.
 - `make app-run` launches the bundle's binary from the terminal; `MK_NODE` and
   `MK_BIN` are inherited for development overrides. A Finder launch uses the
   bundled CLI and launchd's minimal environment.
-- `make app-test`, or `swift test --package-path app` (**82 tests**). Swift
+- `make app-test`, or `swift test --package-path app` (**117 tests**). Swift
   Testing, because this toolchain ships no XCTest. Core tests use the fixture
   report and a recording fake runner; no real `mk` or cache is touched.
 - When the JSON changes, the fixture and the root README's contract change
@@ -175,7 +219,8 @@ formatting), `MkBar` (app and views), and `MkBarCoreTests`. Swift 6, macOS 15.
 - **Rule editing.** Rules are engine-validated data; a UI would duplicate that.
 - **Scheduling opt-in cleans.** Opt-in runs are always a human click on a
   confirmed row; nothing is included automatically.
-- **Deletion, discovery, or paths in Swift.** The one rule again, and the reason
-  the core stays testable.
+- **Cleanup deletion, cleanup discovery, or cleanup paths in Swift.** The
+  engine still owns rules and cleanup. Explore's Trash surface is separate and
+  never writes a registry entry.
 
 State, gaps, and the reasoning behind these choices: [HANDOVER](../HANDOVER.md).

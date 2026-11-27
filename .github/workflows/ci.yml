@@ -44,3 +44,5 @@ jobs:
           test -x "dist/MachineKeeper.app/Contents/MacOS/MachineKeeper"
           test -f "dist/MachineKeeper.app/Contents/Info.plist"
           test -f "dist/MachineKeeper.app/Contents/Resources/cli/bin/mk.mjs"
+          test -f "dist/MachineKeeper.app/Contents/Resources/policy.json"
+          test -f "dist/MachineKeeper.app/Contents/Resources/cli/policy.json"

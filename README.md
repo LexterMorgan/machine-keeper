@@ -109,6 +109,23 @@ nor an external `mk` is found, the app shows the error and setup hint instead
 of crashing. See [app/README.md](app/README.md) for the architecture, state
 model, and design decisions.
 
+### Explore is separate from cleanup
+
+The menu-bar app's **Explore** window searches a folder inside your home for
+regular files, with combinable filename, extension, minimum-size, and
+last-modified filters. It can move individually selected files to the macOS
+Trash. It never writes a rule, never appears in `mk clean`, Clean Safe, or the
+scheduled report, and permanent deletion is not implemented.
+
+Explore uses the same `policy.json` as the CLI guard for the registry
+never-touch list, and additionally treats `~/Library` as read-only. Symlinks,
+hidden entries, `.app` bundles, and packages are skipped during traversal.
+Protected folders remain inspectable, but Trash is disabled there. Every
+selected file is revalidated by canonical parent path, regular-file type,
+device/inode, size, and mtime immediately before the native Trash call; files
+that moved or changed are skipped and reported. Results are capped at 500 and
+the UI says when the list is incomplete.
+
 ## Safety model
 
 This is a deletion tool, so the boring parts are the design:
@@ -123,6 +140,8 @@ This is a deletion tool, so the boring parts are the design:
 - **No network.** The tool never phones home, never uploads a report.
 
 The only permanent loss is what the rule says: rebuildable caches, and — when you opt in — residue and installers. There is a small TOCTOU window between the final realpath check and the filesystem call or command. Node's recursive `rm` has no directory-fd/no-follow mode, so a hostile process that swaps a validated path for a symlink in that window is not defeated; the tool assumes no concurrent attacker with write access to the same home. Commands may also have effects within their tool's own model; only the reviewed commands above are shipped.
+
+**Explore** has its own matching race: its last `lstat` identity check and the native Trash call are separate operations. It rechecks canonical home/root/parent, type, identity, size, and mtime immediately before each move, but cannot make the move atomic with that check. It never permanently deletes.
 
 ## Rules
 

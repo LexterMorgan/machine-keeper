@@ -12,7 +12,7 @@ let package = Package(
         .executableTarget(name: "MkBar", dependencies: ["MkBarCore"]),
         .testTarget(
             name: "MkBarCoreTests",
-            dependencies: ["MkBarCore"],
+            dependencies: ["MkBarCore", "MkBar"],
             resources: [.copy("Fixtures")]
         ),
     ],

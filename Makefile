@@ -24,7 +24,9 @@ app:
 	mkdir -p "$(STAGED)/Contents/MacOS" "$(STAGED)/Contents/Resources" "$(CLI_DIR)"
 	cp app/.build/release/mkbar "$(BINARY)"
 	cp app/Info.plist "$(STAGED)/Contents/Info.plist"
+	cp policy.json "$(STAGED)/Contents/Resources/policy.json"
 	cp -R bin src rules.default.json package.json LICENSE "$(CLI_DIR)/"
+	cp policy.json "$(CLI_DIR)/"
 	/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(VERSION)" "$(STAGED)/Contents/Info.plist"
 	plutil -lint "$(STAGED)/Contents/Info.plist"
 	@if command -v codesign >/dev/null 2>&1; then \

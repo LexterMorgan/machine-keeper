@@ -115,6 +115,10 @@ struct MenuBarPanel: View {
                 openRulesWindow()
             }
 
+            Button("Explore…") {
+                openExploreWindow()
+            }
+
             Button("Settings…") {
                 openSettingsWindow()
             }
@@ -132,12 +136,17 @@ struct MenuBarPanel: View {
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
-        .help("Menu: refresh, preview, clean, all rules, settings, quit")
+        .help("Menu: refresh, preview, clean, all rules, explore, settings, quit")
         .accessibilityLabel("Menu")
     }
 
     private func openRulesWindow() {
         openWindow(id: "rules")
+        NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+
+    private func openExploreWindow() {
+        openWindow(id: "explore")
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
 

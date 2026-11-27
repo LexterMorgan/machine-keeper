@@ -32,6 +32,12 @@ struct MkBarApp: App {
         // The rules window is opened from the panel; it must not launch with
         // the app.
         .defaultLaunchBehavior(.suppressed)
+
+        Window("Explore", id: "explore") {
+            ExploreView()
+        }
+        .defaultSize(width: 880, height: 700)
+        .defaultLaunchBehavior(.suppressed)
     }
 }
 
