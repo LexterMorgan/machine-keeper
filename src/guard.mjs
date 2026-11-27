@@ -1,30 +1,129 @@
+import { readFileSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
- * Locations Machine Keeper refuses to delete inside, even when a rule names
- * them. These hold user work or credentials, never build caches.
+ * Shared policy, read from the repo root relative to this module rather than
+ * the process cwd. The menu-bar app reads the same file from its bundle for
+ * Explore, but Explore's stricter roots stay an app concern: cleanup rules
+ * must remain free to target `~/Library/Caches`.
+ *
+ * `neverTouch` holds user work or credentials. Nothing a cleanup rule names
+ * may be, contain, or live inside one of these locations.
  */
-const NEVER_TOUCH = [
-  "Documents",
-  "Desktop",
-  "Pictures",
-  "Music",
-  "Movies",
-  "Projects",
-  "Sources",
-  "Library/Containers",
-  "Library/Mobile Documents",
-  "Library/Preferences",
-  "Library/Keychains",
-  "Library/Mail",
-  "Library/Messages",
-  ".ssh",
-  ".aws",
-  ".gnupg",
-  ".config",
-  ".password-store",
-];
+const POLICY_SCHEMA_VERSION = 1;
+export const POLICY_FILE = fileURLToPath(new URL("../policy.json", import.meta.url));
+
+function fail(file, message) {
+  throw new Error(`invalid policy at ${file}: ${message}`);
+}
+
+function validatePath(value, file, where) {
+  if (typeof value !== "string") {
+    fail(file, `${where} must be a string`);
+  }
+  if (value.trim() === "") {
+    fail(file, `${where} must be a non-empty relative path`);
+  }
+  if (value.trim() !== value) {
+    fail(file, `${where} must not have leading or trailing whitespace`);
+  }
+  if (value.includes("\0")) {
+    fail(file, `${where} must not contain a NUL byte`);
+  }
+  if (path.isAbsolute(value) || /^[A-Za-z]:[\\/]/.test(value)) {
+    fail(file, `${where} must be relative to home, not absolute: ${value}`);
+  }
+  if (value.startsWith("~")) {
+    fail(file, `${where} must not use ~: ${value}`);
+  }
+  const segments = value.split("/");
+  if (
+    segments.some(
+      (segment) => segment === "" || segment === "." || segment === ".."
+    )
+  ) {
+    fail(file, `${where} must not contain "." or ".." or empty segments: ${value}`);
+  }
+  if (path.posix.normalize(value) !== value) {
+    fail(file, `${where} must be a normalized slash-separated path: ${value}`);
+  }
+  return value;
+}
+
+function validatePathList(payload, key, file, { allowEmpty = false } = {}) {
+  const list = payload[key];
+  if (!Array.isArray(list)) {
+    fail(file, `${key} must be an array`);
+  }
+  if (!allowEmpty && list.length === 0) {
+    fail(file, `${key} must be a non-empty array`);
+  }
+  const seen = new Set();
+  return list.map((value, index) => {
+    const where = `${key}[${index}]`;
+    const checked = validatePath(value, file, where);
+    // Checks are case-insensitive, so "Documents" and "documents" would be
+    // two entries doing the same job; reject the ambiguity.
+    const keyName = checked.toLowerCase();
+    if (seen.has(keyName)) {
+      fail(file, `duplicate path in ${key}: ${value}`);
+    }
+    seen.add(keyName);
+    return checked;
+  });
+}
+
+/**
+ * Validate a parsed policy payload without touching the filesystem. Pure so
+ * tests and future consumers can check a policy file directly.
+ */
+export function validatePolicy(payload, { file = POLICY_FILE } = {}) {
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+    fail(file, "root must be an object");
+  }
+  if (payload.schemaVersion !== POLICY_SCHEMA_VERSION) {
+    fail(file, `schemaVersion must be ${POLICY_SCHEMA_VERSION}`);
+  }
+  const neverTouch = validatePathList(payload, "neverTouch", file);
+  const exploreProtectedRoots = validatePathList(
+    payload,
+    "exploreProtectedRoots",
+    file,
+    { allowEmpty: true }
+  );
+  return Object.freeze({
+    schemaVersion: POLICY_SCHEMA_VERSION,
+    neverTouch: Object.freeze(neverTouch),
+    exploreProtectedRoots: Object.freeze(exploreProtectedRoots),
+  });
+}
+
+/**
+ * Load the shared policy from disk. `file` is injectable for tests; runtime
+ * callers use the module-relative path, never an environment variable or cwd.
+ */
+export function loadPolicy({ file = POLICY_FILE } = {}) {
+  let raw;
+  try {
+    raw = readFileSync(file, "utf8");
+  } catch (error) {
+    throw new Error(`could not read policy at ${file}: ${error.message}`);
+  }
+  let payload;
+  try {
+    payload = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(`invalid policy at ${file}: not valid JSON (${error.message})`);
+  }
+  return validatePolicy(payload, { file });
+}
+
+/** Immutable, validated runtime policy shared with the app. */
+export const POLICY = loadPolicy();
+
+const NEVER_TOUCH = POLICY.neverTouch;
 
 export function relativeToHome(home, absolutePath) {
   return path

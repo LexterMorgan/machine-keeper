@@ -16,6 +16,7 @@
     "bin",
     "src",
     "rules.default.json",
+    "policy.json",
     "README.md",
     "LICENSE"
   ],

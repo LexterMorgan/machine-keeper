@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "neverTouch": [
+    "Documents",
+    "Desktop",
+    "Pictures",
+    "Music",
+    "Movies",
+    "Projects",
+    "Sources",
+    "Library/Containers",
+    "Library/Mobile Documents",
+    "Library/Preferences",
+    "Library/Keychains",
+    "Library/Mail",
+    "Library/Messages",
+    ".ssh",
+    ".aws",
+    ".gnupg",
+    ".config",
+    ".password-store"
+  ],
+  "exploreProtectedRoots": [
+    "Library"
+  ]
+}
