@@ -48,7 +48,7 @@ is enough, no Xcode.
   Trash-disabled. It shares `policy.json` with the CLI guard, adds `~/Library`
   as an Explore-only protected root, and never writes rules or feeds Clean Safe
   or the scheduled report.
-- 117 Swift tests passing (`swift test --package-path app`), written with Swift
+- 120 Swift tests passing (`swift test --package-path app`), written with Swift
   Testing because this machine's CommandLineTools has no XCTest.
 - CI covers the CLI matrix (macOS + Ubuntu, Node 20 and 22) and, separately,
   builds and tests the app on macOS.
@@ -68,7 +68,7 @@ Verify before changing anything:
 node --test test/*.test.mjs                  # must stay 83/83 or grow
 node bin/mk.mjs report             # real, read-only output
 node bin/mk.mjs clean              # dry run, nothing deleted
-swift test --package-path app      # must stay 117/117 or grow
+swift test --package-path app      # must stay 120/120 or grow
 make app                           # hand-built bundle; open dist/MachineKeeper.app
 ```
 
@@ -198,6 +198,9 @@ duplicated as ordinary gaps below.
 - **Explore's live menu-bar UI flow is verified separately from unit tests.**
   Automated tests cover scan/filter/cancel/stale/selection/protected/trash
   outcomes; interactive NSOpenPanel and window behavior require the live check.
+  The case-sensitive containment test runs locally on a disposable
+  case-sensitive APFS image; it will fail clearly (not silently skip) if
+  `hdiutil` cannot create/mount one on another host.
 - **Stale safe ids fail closed.** The app sends the ids from its last report; if
   the registry changed since, the CLI rejects the request before deleting
   anything. That is a visible error and one Refresh away, not a partial clean.

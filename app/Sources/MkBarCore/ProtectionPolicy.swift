@@ -2,8 +2,10 @@ import Foundation
 
 /// Canonical path helpers shared by Explore scanning and its Trash
 /// revalidation. Symlinked ancestors are resolved before any containment
-/// check, and component comparison is case-insensitive so a case-insensitive
-/// volume does not turn one folder into two.
+/// check. Containment compares actual canonical components exactly, so
+/// `Work` and `work` stay distinct on a case-sensitive volume. Protected-name
+/// matching remains case-insensitive because the policy names are labels, not
+/// filesystem ancestry.
 public enum ExplorePath {
     /// The one canonical form used everywhere: standardized and with symlinks
     /// resolved.
@@ -30,7 +32,11 @@ public enum ExplorePath {
         guard candidateComponents.count >= rootComponents.count else { return nil }
 
         for index in rootComponents.indices {
-            guard sameComponent(candidateComponents[index], rootComponents[index]) else {
+            // Containment is filesystem identity, not a case-folded label.
+            // `realpath`/canonicalization has already resolved symlinks and
+            // normalized the path; exact components preserve case-sensitive
+            // siblings such as Work and work.
+            guard candidateComponents[index] == rootComponents[index] else {
                 return nil
             }
         }
@@ -44,9 +50,8 @@ public enum ExplorePath {
         relativeComponents(of: candidate, in: root)?.joined(separator: "/")
     }
 
-    /// Component-wise equality with case folding. On a case-sensitive volume
-    /// this is deliberately stricter about treating two spellings as the same
-    /// location: over-protecting is the safe direction for Explore.
+    /// Component-wise equality with case folding, used only for protected
+    /// policy names. Containment must not use this on case-sensitive volumes.
     public static func sameComponent(_ lhs: String, _ rhs: String) -> Bool {
         lhs.compare(rhs, options: [.caseInsensitive]) == .orderedSame
     }

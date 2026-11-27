@@ -230,6 +230,55 @@ struct ExploreScanTests {
         #expect(result.files.count == 2)
     }
 
+    @Test func hiddenAndPackageRootsAreRejectedBeforeEnumeration() async throws {
+        let fixture = try ExploreTempFixture()
+        defer { fixture.cleanup() }
+
+        let hiddenRoot = try fixture.directory("HiddenRoot")
+        try fixture.write("HiddenRoot/file.txt")
+        try fixture.setFinderHidden(hiddenRoot)
+
+        let hiddenParent = try fixture.directory("HiddenParent")
+        let hiddenChild = try fixture.directory("HiddenParent/child")
+        try fixture.write("HiddenParent/child/file.txt")
+        try fixture.setFinderHidden(hiddenParent)
+
+        let packageRoot = try fixture.directory("Thing.app")
+        try fixture.write("Thing.app/file.txt")
+        let packageChild = try fixture.directory("Bundle.app/Contents")
+        try fixture.write("Bundle.app/Contents/file.txt")
+
+        let service = ExploreService(home: fixture.home)
+        let cases: [(URL, (ExploreError) -> Bool, String)] = [
+            (hiddenRoot, { if case .rootHidden = $0 { return true }; return false }, "hidden root"),
+            (hiddenChild, { if case .rootInHidden = $0 { return true }; return false }, "inside hidden"),
+            (packageRoot, { if case .rootPackage = $0 { return true }; return false }, "package root"),
+            (packageChild, { if case .rootInPackage = $0 { return true }; return false }, "inside package"),
+        ]
+
+        for (root, matches, label) in cases {
+            do {
+                _ = try await service.scan(root: root, policy: makeExplorePolicy())
+                Issue.record("Expected \(label) to be rejected before scanning")
+            } catch let error as ExploreError {
+                #expect(matches(error), "unexpected error for \(label): \(error)")
+            } catch {
+                Issue.record("Unexpected error for \(label): \(error)")
+            }
+        }
+
+        try fixture.write("Documents/ordinary.txt")
+        let documents = try await service.scan(
+            root: fixture.home,
+            policy: makeExplorePolicy()
+        )
+        let doc = try #require(documents.files.first {
+            $0.url.lastPathComponent == "ordinary.txt"
+        })
+        #expect(doc.isProtected)
+        #expect(doc.protectionReason?.contains("never-touch") == true)
+    }
+
     @Test func unreadableLocationsAreReportedNotReturned() async throws {
         let fixture = try ExploreTempFixture()
         defer { fixture.cleanup() }

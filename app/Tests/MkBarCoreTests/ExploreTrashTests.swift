@@ -309,6 +309,35 @@ struct ExploreTrashTests {
         #expect(fixture.exists(fileURL))
     }
 
+    @Test func finderHiddenOrdinaryFolderBlocksTrash() async throws {
+        let fixture = try ExploreTempFixture()
+        defer { fixture.cleanup() }
+
+        let file = try fixture.write("root/Visible/keep.txt")
+        let files = try await scan(root: "root", fixture: fixture)
+        let selected = try #require(files.first)
+
+        let hiddenFolder = fixture.home.appendingPathComponent("root/Visible")
+        try fixture.setFinderHidden(hiddenFolder)
+
+        let recorder = TrashRecorder()
+        let service = ExploreTrashService(
+            home: fixture.home,
+            policy: makeExplorePolicy(),
+            trashOperation: { url in recorder.record(url) }
+        )
+        let results = await service.trash(
+            files: [selected],
+            root: fixture.home.appendingPathComponent("root")
+        )
+
+        #expect(results[0].outcome == .skipped)
+        #expect(results[0].message.lowercased().contains("hidden"))
+        #expect(results[0].message.contains("Visible"))
+        #expect(recorder.urls.isEmpty)
+        #expect(fixture.exists(file))
+    }
+
     @Test func rootOutsideHomeSkipsEveryFile() async throws {
         let fixture = try ExploreTempFixture()
         defer { fixture.cleanup() }
@@ -367,23 +396,6 @@ struct ExploreTrashTests {
             root: fixture.home.appendingPathComponent(relativePath),
             policy: makeExplorePolicy()
         ).files
-    }
-}
-
-private final class TrashRecorder: @unchecked Sendable {
-    private let lock = NSLock()
-    private var storage: [URL] = []
-
-    var urls: [URL] {
-        lock.lock()
-        defer { lock.unlock() }
-        return storage
-    }
-
-    func record(_ url: URL) {
-        lock.lock()
-        storage.append(url)
-        lock.unlock()
     }
 }
 

@@ -120,6 +120,10 @@ scheduled report, and permanent deletion is not implemented.
 Explore uses the same `policy.json` as the CLI guard for the registry
 never-touch list, and additionally treats `~/Library` as read-only. Symlinks,
 hidden entries, `.app` bundles, and packages are skipped during traversal.
+Exact canonical ancestry keeps `Work` and `work` distinct on case-sensitive
+volumes; a directly selected root inside a hidden folder or package is rejected
+before enumeration, and Finder's hidden flag is rechecked on every ancestor
+before a Trash move.
 Protected folders remain inspectable, but Trash is disabled there. Every
 selected file is revalidated by canonical parent path, regular-file type,
 device/inode, size, and mtime immediately before the native Trash call; files

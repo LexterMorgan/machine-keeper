@@ -63,11 +63,55 @@ public struct ExploreService: Sendable {
         guard ExplorePath.isWithin(canonicalRoot, root: canonicalHome) else {
             throw ExploreError.rootOutsideHome(canonicalRoot.path)
         }
+
+        try validateExcludedAncestors(root: canonicalRoot, home: canonicalHome)
+
         guard FileManager.default.isReadableFile(atPath: canonicalRoot.path) else {
             throw ExploreError.rootNotReadable(canonicalRoot.path)
         }
 
         return canonicalRoot
+    }
+
+    /// A directly selected root is not special: it must obey the same hidden
+    /// and package rules as every traversed directory, including its ancestors
+    /// up to home. Metadata failure is a rejection, never a permissive guess.
+    private static func validateExcludedAncestors(root: URL, home: URL) throws {
+        var current = root
+        while true {
+            guard let snapshot = try? FileMetadata.lstat(current), snapshot.isDirectory else {
+                throw ExploreError.rootMetadataUnavailable(current.path)
+            }
+
+            let values: URLResourceValues
+            do {
+                values = try current.resourceValues(forKeys: [.isHiddenKey, .isPackageKey])
+            } catch {
+                throw ExploreError.rootMetadataUnavailable(current.path)
+            }
+
+            let name = current.lastPathComponent
+            if name.hasPrefix(".") || values.isHidden == true {
+                if current.path == root.path {
+                    throw ExploreError.rootHidden(current.path)
+                }
+                throw ExploreError.rootInHidden(current.path)
+            }
+            if ExplorePackage.hasPackageComponent(name) || values.isPackage == true {
+                if current.path == root.path {
+                    throw ExploreError.rootPackage(current.path)
+                }
+                throw ExploreError.rootInPackage(current.path)
+            }
+
+            if current.path == home.path {
+                break
+            }
+            current = ExplorePath.canonical(current.deletingLastPathComponent())
+            guard ExplorePath.isWithin(current, root: home) else {
+                throw ExploreError.rootOutsideHome(current.path)
+            }
+        }
     }
 
     public func scan(

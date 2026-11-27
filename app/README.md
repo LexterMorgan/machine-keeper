@@ -124,8 +124,11 @@ Explore answers a different question: "what is in this folder?" It is not a
 rule builder and has no path into the cleanup registry.
 
 - The root must be a folder inside the current user's home; the canonical home
-  and root are checked. Results show the full canonical path, size, and
-  modification date.
+  and root are checked. Containment is exact canonical filesystem ancestry, so
+  `Work` and `work` stay distinct on a case-sensitive volume; only protected
+  names are matched case-insensitively. A directly selected root or any of its
+  ancestors that is hidden or a package is rejected before enumeration.
+  Results show the full canonical path, size, and modification date.
 - Filters combine with AND: filename substring, extension (case-insensitive,
   leading dot optional), minimum size, and modified-after date.
 - Scans run off-main, are capped at 500 matches, and are cancelled by changing
@@ -145,9 +148,10 @@ rule builder and has no path into the cleanup registry.
   per file, and only `.trashed` rows leave the result/selection set. The copy
   says "moved to Trash", never "freed".
 - Immediately before each move, canonical home/root/parent are re-resolved and
-  the file is `lstat`ed as a regular, non-symlink file with matching
-  device/inode, size, and mtime. Changed, moved, hidden, package, protected, or
-  unverifiable files are skipped and reported.
+  every directory up to home is rechecked for Finder's hidden flag, dot names,
+  package status, and readable metadata. The file is `lstat`ed as a regular,
+  non-symlink file with matching device/inode, size, and mtime. Changed, moved,
+  hidden, package, protected, or unverifiable files are skipped and reported.
 - Remaining race: the final validation and `trashItem` are not atomic. A file
   swapped in that window cannot be detected by `FileManager`; this is
   documented here and in the Trash service.
@@ -207,7 +211,7 @@ formatting), `MkBar` (app and views), and `MkBarCoreTests`. Swift 6, macOS 15.
 - `make app-run` launches the bundle's binary from the terminal; `MK_NODE` and
   `MK_BIN` are inherited for development overrides. A Finder launch uses the
   bundled CLI and launchd's minimal environment.
-- `make app-test`, or `swift test --package-path app` (**117 tests**). Swift
+- `make app-test`, or `swift test --package-path app` (**120 tests**). Swift
   Testing, because this toolchain ships no XCTest. Core tests use the fixture
   report and a recording fake runner; no real `mk` or cache is touched.
 - When the JSON changes, the fixture and the root README's contract change

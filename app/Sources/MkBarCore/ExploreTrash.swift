@@ -168,25 +168,11 @@ public struct ExploreTrashService: Sendable {
             return result(.skipped, "The file is no longer inside the selected folder.")
         }
 
-        if let relativeComponents = ExplorePath.relativeComponents(
-            of: canonicalFile,
-            in: canonicalHome
-        ) {
-            for component in relativeComponents {
-                if component.hasPrefix(".") {
-                    return result(.skipped, "The file is inside a hidden folder.")
-                }
-                if ExplorePackage.hasPackageComponent(component) {
-                    return result(.skipped, "The file is inside an app bundle or package.")
-                }
-            }
-        }
-
         if isPackageOrApp(canonicalFile, name: originalName) {
             return result(.skipped, "The file is an app bundle or package.")
         }
-        if isInsidePackageOrApp(canonicalParent, root: canonicalRoot) {
-            return result(.skipped, "The file is inside an app bundle or package.")
+        if let reason = ancestorExclusionReason(from: canonicalParent, home: canonicalHome) {
+            return result(.skipped, reason)
         }
 
         // Re-read the canonical path. This is the identity captured at scan
@@ -226,21 +212,46 @@ public struct ExploreTrashService: Sendable {
         }
     }
 
-    /// A directory can be a package even when the final file's own name is
-    /// ordinary. Check every canonical parent component down to the chosen
-    /// root so direct callers cannot trash package contents.
-    private func isInsidePackageOrApp(_ directory: URL, root: URL) -> Bool {
-        let rootComponents = ExplorePath.components(of: root)
+    /// Recheck every directory from the file's parent up to home immediately
+    /// before the move. This includes the selected root's ancestors, not just
+    /// components below it. Finder's hidden flag matters even when the folder
+    /// name has no dot. Missing metadata is a skip, not a guess.
+    private func ancestorExclusionReason(from directory: URL, home: URL) -> String? {
         var current = ExplorePath.canonical(directory)
 
         while true {
-            let components = ExplorePath.components(of: current)
-            guard components.count > rootComponents.count else { return false }
-            if isPackageOrApp(current, name: current.lastPathComponent) {
-                return true
+            guard ExplorePath.isWithin(current, root: home) else {
+                return "The folder \(current.path) is outside your home folder."
+            }
+            guard let snapshot = try? FileMetadata.lstat(current),
+                  snapshot.isDirectory
+            else {
+                return "Could not verify the folder \(current.path); the file was not moved."
+            }
+
+            let values: URLResourceValues
+            do {
+                values = try current.resourceValues(forKeys: [.isHiddenKey, .isPackageKey])
+            } catch {
+                return "Could not verify whether \(current.path) is hidden or a package; "
+                    + "the file was not moved."
+            }
+
+            let name = current.lastPathComponent
+            if name.hasPrefix(".") || values.isHidden == true {
+                return "The folder \(current.path) is hidden; the file was not moved to Trash."
+            }
+            if ExplorePackage.hasPackageComponent(name) || values.isPackage == true {
+                return "The folder \(current.path) is an app bundle or package; "
+                    + "the file was not moved to Trash."
+            }
+
+            if current.path == home.path {
+                break
             }
             current = ExplorePath.canonical(current.deletingLastPathComponent())
         }
+        return nil
     }
 
     private func isHidden(_ url: URL, name: String) -> Bool {

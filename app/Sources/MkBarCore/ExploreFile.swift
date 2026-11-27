@@ -132,6 +132,11 @@ public enum ExploreError: Error, Sendable, Equatable, LocalizedError {
     case rootNotDirectory(String)
     case rootOutsideHome(String)
     case rootNotReadable(String)
+    case rootHidden(String)
+    case rootInHidden(String)
+    case rootPackage(String)
+    case rootInPackage(String)
+    case rootMetadataUnavailable(String)
     case scanFailed(String)
 
     public var errorDescription: String? {
@@ -148,6 +153,16 @@ public enum ExploreError: Error, Sendable, Equatable, LocalizedError {
             return "\(path) is outside your home folder. Choose a folder inside it."
         case .rootNotReadable(let path):
             return "The selected folder \(path) is not readable."
+        case .rootHidden(let path):
+            return "The selected folder \(path) is hidden. Choose a visible folder."
+        case .rootInHidden(let path):
+            return "The selected folder \(path) is inside a hidden folder."
+        case .rootPackage(let path):
+            return "The selected folder \(path) is an app bundle or package."
+        case .rootInPackage(let path):
+            return "The selected folder \(path) is inside an app bundle or package."
+        case .rootMetadataUnavailable(let path):
+            return "Could not verify whether \(path) is hidden or a package."
         case .scanFailed(let detail):
             return "The scan failed: \(detail)"
         }
